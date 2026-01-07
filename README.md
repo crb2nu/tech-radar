@@ -1,3 +1,5 @@
+![Banner](assets/banner.png)
+
 # Tech Radar
 
 Personal technology radar for tracking tech decisions across projects.
