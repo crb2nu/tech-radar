@@ -1,0 +1,35 @@
+meta:
+    name: Personal Tech Radar
+    updated: 2026-02-12T18:12:05.768356-05:00
+    version: 1.0.0
+entries:
+    - name: Go
+      quadrant: languages
+      ring: adopt
+      description: Primary backend language
+      moved: 0
+    - name: Python
+      quadrant: languages
+      ring: adopt
+      description: Data processing and scripting
+      moved: 0
+    - name: TypeScript
+      quadrant: languages
+      ring: adopt
+      description: Frontend and Node.js development
+      moved: 0
+    - name: React
+      quadrant: tools
+      ring: adopt
+      description: Strategic choice for all web apps
+      moved: 1
+      tags:
+        - frontend
+        - library
+      history:
+        - date: 2026-02-12T18:12:05.76206-05:00
+          ring: trial
+          reason: Widely used in our projects
+        - date: 2026-02-12T18:12:05.768349-05:00
+          ring: adopt
+          reason: Strategic choice for all web apps

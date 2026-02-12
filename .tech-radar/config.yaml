@@ -1,0 +1,23 @@
+scan:
+    files:
+        - package.json
+        - go.mod
+        - requirements.txt
+        - pyproject.toml
+        - Cargo.toml
+    mappings:
+        react:
+            name: React
+            quadrant: frameworks
+        typescript:
+            name: TypeScript
+            quadrant: languages
+    exclude: []
+visualization:
+    colors:
+        adopt: '#93c47d'
+        assess: '#fbdb84'
+        hold: '#efafa9'
+        trial: '#93d2c2'
+    title: Tech Radar
+    show_dots: true

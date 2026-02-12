@@ -135,61 +135,102 @@ func addCmd() *cobra.Command {
 		quadrant string
 		ring     string
 		reason   string
+		tags     string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "add",
-		Short: "Add a technology entry",
+		Short: "Add or update a technology entry",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Load existing radar
-			data, err := os.ReadFile(".tech-radar/radar.yaml")
+			radar, err := loadRadar()
 			if err != nil {
 				return fmt.Errorf("radar not initialized, run 'radar init' first")
 			}
 
-			var radar types.Radar
-			if err := yaml.Unmarshal(data, &radar); err != nil {
-				return err
+			// Ring order for movement calculation (center to edge)
+			ringOrder := map[types.Ring]int{
+				types.RingAdopt:  0,
+				types.RingTrial:  1,
+				types.RingAssess: 2,
+				types.RingHold:   3,
 			}
 
-			// Add new entry
-			entry := types.Entry{
-				Name:        name,
-				Quadrant:    types.Quadrant(quadrant),
-				Ring:        types.Ring(ring),
-				Description: reason,
-				Moved:       1,
-				History: []types.HistoryEntry{
-					{
-						Date:   time.Now(),
-						Ring:   types.Ring(ring),
-						Reason: reason,
+			tagList := []string{}
+			if tags != "" {
+				for _, t := range strings.Split(tags, ",") {
+					tagList = append(tagList, strings.TrimSpace(t))
+				}
+			}
+
+			found := false
+			newRing := types.Ring(ring)
+			for i, entry := range radar.Entries {
+				if strings.EqualFold(entry.Name, name) {
+					// Update existing entry
+					oldRing := entry.Ring
+					radar.Entries[i].Ring = newRing
+					if quadrant != "" {
+						radar.Entries[i].Quadrant = types.Quadrant(quadrant)
+					}
+					if reason != "" {
+						radar.Entries[i].Description = reason
+					}
+					if len(tagList) > 0 {
+						radar.Entries[i].Tags = tagList
+					}
+
+					// Calculate movement
+					if oldRing != newRing {
+						if ringOrder[newRing] < ringOrder[oldRing] {
+							radar.Entries[i].Moved = 1 // Moved in
+						} else {
+							radar.Entries[i].Moved = -1 // Moved out
+						}
+						radar.Entries[i].History = append(radar.Entries[i].History, types.HistoryEntry{
+							Date:   time.Now(),
+							Ring:   newRing,
+							Reason: reason,
+						})
+					} else {
+						radar.Entries[i].Moved = 0
+					}
+					found = true
+					fmt.Printf("Updated %s: %s -> %s\n", entry.Name, oldRing, newRing)
+					break
+				}
+			}
+
+			if !found {
+				// Add new entry
+				entry := types.Entry{
+					Name:        name,
+					Quadrant:    types.Quadrant(quadrant),
+					Ring:        newRing,
+					Description: reason,
+					Tags:        tagList,
+					Moved:       0,
+					History: []types.HistoryEntry{
+						{
+							Date:   time.Now(),
+							Ring:   newRing,
+							Reason: reason,
+						},
 					},
-				},
+				}
+				radar.Entries = append(radar.Entries, entry)
+				fmt.Printf("Added %s to %s ring\n", name, ring)
 			}
 
-			radar.Entries = append(radar.Entries, entry)
 			radar.Meta.Updated = time.Now()
-
-			// Save
-			newData, err := yaml.Marshal(radar)
-			if err != nil {
-				return err
-			}
-
-			if err := os.WriteFile(".tech-radar/radar.yaml", newData, 0644); err != nil {
-				return err
-			}
-
-			fmt.Printf("Added %s to %s ring\n", name, ring)
-			return nil
+			return saveRadar(radar)
 		},
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", "Technology name")
-	cmd.Flags().StringVar(&quadrant, "quadrant", "tools", "Quadrant (languages, frameworks, tools, platforms, techniques)")
+	cmd.Flags().StringVar(&quadrant, "quadrant", "tools", "Quadrant (languages, frameworks, tools, platforms)")
 	cmd.Flags().StringVar(&ring, "ring", "assess", "Ring (adopt, trial, assess, hold)")
-	cmd.Flags().StringVar(&reason, "reason", "", "Reason for adding")
+	cmd.Flags().StringVar(&reason, "reason", "", "Reason for adding/updating")
+	cmd.Flags().StringVar(&tags, "tags", "", "Comma-separated list of tags")
 	cmd.MarkFlagRequired("name")
 
 	return cmd
@@ -237,7 +278,7 @@ func scanCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVar(&autoAdd, "auto-add", false, "Automatically add discovered technologies")
+	cmd.Flags().BoolVar(&autoAdd, "auto-add", false, "Automatically add/update discovered technologies")
 
 	return cmd
 }
@@ -248,17 +289,22 @@ func addToRadar(techs []types.DiscoveredTech) error {
 		return fmt.Errorf("radar not initialized, run 'radar init' first")
 	}
 
-	existing := make(map[string]bool)
-	for _, entry := range radar.Entries {
-		existing[strings.ToLower(entry.Name)] = true
-	}
-
 	addedCount := 0
+
 	for _, tech := range techs {
-		if existing[strings.ToLower(tech.Name)] {
+		found := false
+		for _, entry := range radar.Entries {
+			if strings.EqualFold(entry.Name, tech.Name) {
+				found = true
+				break
+			}
+		}
+
+		if found {
 			continue
 		}
 
+		// Add new entry
 		quadrant := tech.Quadrant
 		if quadrant == "" {
 			quadrant = types.QuadrantTools
@@ -269,7 +315,7 @@ func addToRadar(techs []types.DiscoveredTech) error {
 			Quadrant:    quadrant,
 			Ring:        types.RingAssess,
 			Description: fmt.Sprintf("Auto-discovered from %s", tech.Source),
-			Moved:       1,
+			Moved:       0,
 			History: []types.HistoryEntry{
 				{
 					Date:   time.Now(),
@@ -280,7 +326,6 @@ func addToRadar(techs []types.DiscoveredTech) error {
 		}
 
 		radar.Entries = append(radar.Entries, entry)
-		existing[strings.ToLower(tech.Name)] = true
 		addedCount++
 	}
 
@@ -291,7 +336,7 @@ func addToRadar(techs []types.DiscoveredTech) error {
 		}
 		fmt.Printf("Added %d new entries to radar\n", addedCount)
 	} else {
-		fmt.Println("No new entries to add")
+		fmt.Println("No new technologies discovered")
 	}
 
 	return nil
