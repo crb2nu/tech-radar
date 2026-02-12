@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
 )
 
@@ -62,8 +63,6 @@ func (s *Scanner) Scan(root string) (*types.ScanResult, error) {
 		// Parse the file
 		techs, err := s.parseFile(path, filename)
 		if err != nil {
-			// Log error but continue
-			// fmt.Fprintf(os.Stderr, "Error parsing %s: %v\n", path, err)
 			return nil
 		}
 
@@ -98,6 +97,10 @@ func (s *Scanner) parseFile(path, filename string) ([]types.DiscoveredTech, erro
 		return s.parseGoMod(path)
 	case "requirements.txt":
 		return s.parseRequirementsTxt(path)
+	case "Cargo.toml":
+		return s.parseCargoToml(path)
+	case "pyproject.toml":
+		return s.parsePyprojectToml(path)
 	}
 	return nil, nil
 }
@@ -137,7 +140,6 @@ func (s *Scanner) parsePackageJSON(path string) ([]types.DiscoveredTech, error) 
 }
 
 func (s *Scanner) parseGoMod(path string) ([]types.DiscoveredTech, error) {
-	// Basic parser for now
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -201,15 +203,12 @@ func (s *Scanner) parseRequirementsTxt(path string) ([]types.DiscoveredTech, err
 			continue
 		}
 
-		// Handle various formats like "package==version", "package>=version", "package"
 		parts := strings.Split(line, "==")
 		name := parts[0]
 		version := ""
 		if len(parts) > 1 {
 			version = parts[1]
 		} else {
-			// Try other splitters if needed, or just take the name
-			// Simple split by >=, <=, etc.
 			separators := []string{">=", "<=", ">", "<", "~="}
 			for _, sep := range separators {
 				if strings.Contains(name, sep) {
@@ -229,6 +228,115 @@ func (s *Scanner) parseRequirementsTxt(path string) ([]types.DiscoveredTech, err
 				Source:  "requirements.txt",
 			})
 		}
+	}
+
+	return techs, nil
+}
+
+func (s *Scanner) parseCargoToml(path string) ([]types.DiscoveredTech, error) {
+	var cargo struct {
+		Dependencies    map[string]interface{} `toml:"dependencies"`
+		DevDependencies map[string]interface{} `toml:"dev-dependencies"`
+		BuildDeps       map[string]interface{} `toml:"build-dependencies"`
+	}
+
+	if _, err := toml.DecodeFile(path, &cargo); err != nil {
+		return nil, err
+	}
+
+	var techs []types.DiscoveredTech
+	addDeps := func(deps map[string]interface{}) {
+		for name, val := range deps {
+			version := ""
+			switch v := val.(type) {
+			case string:
+				version = v
+			case map[string]interface{}:
+				if ver, ok := v["version"].(string); ok {
+					version = ver
+				}
+			}
+			techs = append(techs, types.DiscoveredTech{
+				Name:    name,
+				Version: version,
+				Source:  "Cargo.toml",
+			})
+		}
+	}
+
+	addDeps(cargo.Dependencies)
+	addDeps(cargo.DevDependencies)
+	addDeps(cargo.BuildDeps)
+
+	return techs, nil
+}
+
+func (s *Scanner) parsePyprojectToml(path string) ([]types.DiscoveredTech, error) {
+	var pyproject struct {
+		Project struct {
+			Dependencies []string `toml:"dependencies"`
+		} `toml:"project"`
+		Tool struct {
+			Poetry struct {
+				Dependencies    map[string]interface{} `toml:"dependencies"`
+				DevDependencies map[string]interface{} `toml:"dev-dependencies"`
+				Group           map[string]struct {
+					Dependencies map[string]interface{} `toml:"dependencies"`
+				} `toml:"group"`
+			} `toml:"poetry"`
+		} `toml:"tool"`
+	}
+
+	if _, err := toml.DecodeFile(path, &pyproject); err != nil {
+		return nil, err
+	}
+
+	var techs []types.DiscoveredTech
+
+	// Standard PEP 621 dependencies
+	for _, dep := range pyproject.Project.Dependencies {
+		name := dep
+		version := ""
+		for _, sep := range []string{"==", ">=", "<=", ">", "<", "~=", " "} {
+			if idx := strings.Index(dep, sep); idx != -1 {
+				name = strings.TrimSpace(dep[:idx])
+				version = strings.TrimSpace(dep[idx:])
+				break
+			}
+		}
+		techs = append(techs, types.DiscoveredTech{
+			Name:    name,
+			Version: version,
+			Source:  "pyproject.toml",
+		})
+	}
+
+	addPoetryDeps := func(deps map[string]interface{}) {
+		for name, val := range deps {
+			if name == "python" {
+				continue
+			}
+			version := ""
+			switch v := val.(type) {
+			case string:
+				version = v
+			case map[string]interface{}:
+				if ver, ok := v["version"].(string); ok {
+					version = ver
+				}
+			}
+			techs = append(techs, types.DiscoveredTech{
+				Name:    name,
+				Version: version,
+				Source:  "pyproject.toml",
+			})
+		}
+	}
+
+	addPoetryDeps(pyproject.Tool.Poetry.Dependencies)
+	addPoetryDeps(pyproject.Tool.Poetry.DevDependencies)
+	for _, group := range pyproject.Tool.Poetry.Group {
+		addPoetryDeps(group.Dependencies)
 	}
 
 	return techs, nil

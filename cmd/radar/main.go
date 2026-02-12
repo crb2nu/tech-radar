@@ -93,6 +93,7 @@ func initCmd() *cobra.Command {
 					Files: []string{
 						"package.json",
 						"go.mod",
+						"requirements.txt",
 						"pyproject.toml",
 						"Cargo.toml",
 					},
