@@ -2,11 +2,16 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	techradar "gitlab.flexinfer.ai/services/tech-radar"
+	"gitlab.flexinfer.ai/services/tech-radar/internal/radar"
+	"gitlab.flexinfer.ai/services/tech-radar/internal/scanner"
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
 	"gopkg.in/yaml.v3"
 )
@@ -197,10 +202,35 @@ func scanCmd() *cobra.Command {
 		Short: "Scan projects for technologies",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Load config if available
+			var config types.Config
+			// Default config
+			config.Scan.Files = []string{"package.json", "go.mod", "requirements.txt", "pyproject.toml", "Cargo.toml"}
+
+			if data, err := os.ReadFile(".tech-radar/config.yaml"); err == nil {
+				yaml.Unmarshal(data, &config)
+			}
+
+			s := scanner.New(config.Scan)
+
 			for _, path := range args {
 				fmt.Printf("Scanning %s...\n", path)
-				// TODO: Implement scanning
-				fmt.Println("  (scanning not yet implemented)")
+				result, err := s.Scan(path)
+				if err != nil {
+					fmt.Printf("Error scanning %s: %v\n", path, err)
+					continue
+				}
+
+				fmt.Printf("Found %d technologies:\n", len(result.Technologies))
+				for _, tech := range result.Technologies {
+					fmt.Printf("  - %s (%s)\n", tech.Name, tech.Source)
+				}
+
+				if autoAdd && len(result.Technologies) > 0 {
+					if err := addToRadar(result.Technologies); err != nil {
+						fmt.Printf("Error adding to radar: %v\n", err)
+					}
+				}
 			}
 			return nil
 		},
@@ -211,6 +241,82 @@ func scanCmd() *cobra.Command {
 	return cmd
 }
 
+func addToRadar(techs []types.DiscoveredTech) error {
+	radar, err := loadRadar()
+	if err != nil {
+		return fmt.Errorf("radar not initialized, run 'radar init' first")
+	}
+
+	existing := make(map[string]bool)
+	for _, entry := range radar.Entries {
+		existing[strings.ToLower(entry.Name)] = true
+	}
+
+	addedCount := 0
+	for _, tech := range techs {
+		if existing[strings.ToLower(tech.Name)] {
+			continue
+		}
+
+		quadrant := tech.Quadrant
+		if quadrant == "" {
+			quadrant = types.QuadrantTools
+		}
+
+		entry := types.Entry{
+			Name:        tech.Name,
+			Quadrant:    quadrant,
+			Ring:        types.RingAssess,
+			Description: fmt.Sprintf("Auto-discovered from %s", tech.Source),
+			Moved:       1,
+			History: []types.HistoryEntry{
+				{
+					Date:   time.Now(),
+					Ring:   types.RingAssess,
+					Reason: fmt.Sprintf("Auto-discovered from %s", tech.Source),
+				},
+			},
+		}
+
+		radar.Entries = append(radar.Entries, entry)
+		existing[strings.ToLower(tech.Name)] = true
+		addedCount++
+	}
+
+	if addedCount > 0 {
+		radar.Meta.Updated = time.Now()
+		if err := saveRadar(radar); err != nil {
+			return err
+		}
+		fmt.Printf("Added %d new entries to radar\n", addedCount)
+	} else {
+		fmt.Println("No new entries to add")
+	}
+
+	return nil
+}
+
+func loadRadar() (*types.Radar, error) {
+	data, err := os.ReadFile(".tech-radar/radar.yaml")
+	if err != nil {
+		return nil, err
+	}
+
+	var radar types.Radar
+	if err := yaml.Unmarshal(data, &radar); err != nil {
+		return nil, err
+	}
+	return &radar, nil
+}
+
+func saveRadar(radar *types.Radar) error {
+	data, err := yaml.Marshal(radar)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(".tech-radar/radar.yaml", data, 0644)
+}
+
 func renderCmd() *cobra.Command {
 	var output string
 
@@ -218,9 +324,54 @@ func renderCmd() *cobra.Command {
 		Use:   "render",
 		Short: "Generate radar visualization",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: Implement SVG/HTML rendering
-			fmt.Printf("Rendering to %s...\n", output)
-			fmt.Println("(rendering not yet implemented)")
+			radarData, err := os.ReadFile(".tech-radar/radar.yaml")
+			if err != nil {
+				return fmt.Errorf("radar not initialized")
+			}
+
+			var r types.Radar
+			if err := yaml.Unmarshal(radarData, &r); err != nil {
+				return err
+			}
+
+			jsonData, err := json.Marshal(r)
+			if err != nil {
+				return err
+			}
+
+			// Read index.html from embedded assets
+			indexData, err := techradar.UI.ReadFile("web/dist/index.html")
+			if err != nil {
+				return fmt.Errorf("failed to read index.html: %v", err)
+			}
+
+			html := string(indexData)
+			// Inject data - we'll need the frontend to look for window.RADAR_DATA
+			script := fmt.Sprintf("<script>window.RADAR_DATA = %s;</script>", string(jsonData))
+			html = strings.Replace(html, "<head>", "<head>"+script, 1)
+
+			// Also need to handle other assets (JS/CSS)
+			// For a truly portable HTML, we might want to inline them,
+			// but for now, we'll just assume they are relative.
+			// However, since we're using go:embed, they are already built.
+
+			if err := os.WriteFile(output, []byte(html), 0644); err != nil {
+				return err
+			}
+
+			// Copy assets
+			entries, err := techradar.UI.ReadDir("web/dist/radar-assets")
+			if err == nil {
+				os.MkdirAll("radar-assets", 0755)
+				for _, entry := range entries {
+					data, err := techradar.UI.ReadFile("web/dist/radar-assets/" + entry.Name())
+					if err == nil {
+						os.WriteFile("radar-assets/"+entry.Name(), data, 0644)
+					}
+				}
+			}
+
+			fmt.Printf("Rendered radar to %s\n", output)
 			return nil
 		},
 	}
@@ -237,9 +388,8 @@ func serveCmd() *cobra.Command {
 		Use:   "serve",
 		Short: "Serve interactive radar",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("Serving radar on http://localhost:%d\n", port)
-			fmt.Println("(server not yet implemented)")
-			return nil
+			server := radar.NewServer(port, techradar.UI)
+			return server.Start()
 		},
 	}
 

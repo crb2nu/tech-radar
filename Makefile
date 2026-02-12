@@ -3,8 +3,11 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 
-build:
+build: frontend
 	go build $(LDFLAGS) -o bin/radar ./cmd/radar
+
+frontend:
+	cd web && pnpm install && pnpm build
 
 test:
 	go test -race -cover ./...
