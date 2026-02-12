@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -365,6 +366,7 @@ func saveRadar(radar *types.Radar) error {
 
 func renderCmd() *cobra.Command {
 	var output string
+	var standalone bool
 
 	cmd := &cobra.Command{
 		Use:   "render",
@@ -392,37 +394,67 @@ func renderCmd() *cobra.Command {
 			}
 
 			html := string(indexData)
-			// Inject data - we'll need the frontend to look for window.RADAR_DATA
+			// Inject data
 			script := fmt.Sprintf("<script>window.RADAR_DATA = %s;</script>", string(jsonData))
 			html = strings.Replace(html, "<head>", "<head>"+script, 1)
 
-			// Also need to handle other assets (JS/CSS)
-			// For a truly portable HTML, we might want to inline them,
-			// but for now, we'll just assume they are relative.
-			// However, since we're using go:embed, they are already built.
+			if standalone {
+				// Inline CSS
+				reCSS := regexp.MustCompile(`<link rel="stylesheet" [^>]*href="\./radar-assets/([^"]+)"[^>]*>`)
+				html = reCSS.ReplaceAllStringFunc(html, func(match string) string {
+					submatch := reCSS.FindStringSubmatch(match)
+					if len(submatch) > 1 {
+						content, err := techradar.UI.ReadFile("web/dist/radar-assets/" + submatch[1])
+						if err == nil {
+							return "<style>" + string(content) + "</style>"
+						}
+					}
+					return match
+				})
+
+				// Inline JS
+				reJS := regexp.MustCompile(`<script [^>]*src="\./radar-assets/([^"]+)"[^>]*></script>`)
+				html = reJS.ReplaceAllStringFunc(html, func(match string) string {
+					submatch := reJS.FindStringSubmatch(match)
+					if len(submatch) > 1 {
+						content, err := techradar.UI.ReadFile("web/dist/radar-assets/" + submatch[1])
+						if err == nil {
+							// For standalone, we might need to strip 'type="module"' if we want it to work 
+							// in all contexts, but for now just inlining is fine.
+							return "<script>" + string(content) + "</script>"
+						}
+					}
+					return match
+				})
+			} else {
+				// Copy assets as before
+				entries, err := techradar.UI.ReadDir("web/dist/radar-assets")
+				if err == nil {
+					os.MkdirAll("radar-assets", 0755)
+					for _, entry := range entries {
+						data, err := techradar.UI.ReadFile("web/dist/radar-assets/" + entry.Name())
+						if err == nil {
+							os.WriteFile("radar-assets/"+entry.Name(), data, 0644)
+						}
+					}
+				}
+			}
 
 			if err := os.WriteFile(output, []byte(html), 0644); err != nil {
 				return err
 			}
 
-			// Copy assets
-			entries, err := techradar.UI.ReadDir("web/dist/radar-assets")
-			if err == nil {
-				os.MkdirAll("radar-assets", 0755)
-				for _, entry := range entries {
-					data, err := techradar.UI.ReadFile("web/dist/radar-assets/" + entry.Name())
-					if err == nil {
-						os.WriteFile("radar-assets/"+entry.Name(), data, 0644)
-					}
-				}
+			if standalone {
+				fmt.Printf("Rendered standalone radar to %s\n", output)
+			} else {
+				fmt.Printf("Rendered radar to %s (assets in radar-assets/)\n", output)
 			}
-
-			fmt.Printf("Rendered radar to %s\n", output)
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVarP(&output, "output", "o", "radar.html", "Output file")
+	cmd.Flags().BoolVarP(&standalone, "standalone", "s", false, "Inline all assets into a single HTML file")
 
 	return cmd
 }

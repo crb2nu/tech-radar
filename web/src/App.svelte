@@ -163,12 +163,12 @@
         <!-- Rings -->
         {#each rings.slice().reverse() as ring, i}
           {@const r = ringRadius[3 - i]}
-          <circle cx="300" cy="300" r={r} fill={colors[ring as keyof typeof colors]} fill-opacity="0.1" stroke="#fff" stroke-width="2" />
+          <circle cx="300" cy="300" r={r} fill={colors[ring as keyof typeof colors]} fill-opacity="0.1" class="radar-ring" stroke-width="2" />
         {/each}
         
         <!-- Quadrant dividers -->
-        <line x1="300" y1="20" x2="300" y2="580" stroke="#fff" stroke-width="2" />
-        <line x1="20" y1="300" x2="580" y2="300" stroke="#fff" stroke-width="2" />
+        <line x1="300" y1="20" x2="300" y2="580" class="radar-divider" stroke-width="2" />
+        <line x1="20" y1="300" x2="580" y2="300" class="radar-divider" stroke-width="2" />
 
         <!-- Quadrant Labels -->
         <text x="50" y="50" class="quad-label">LANGUAGES</text>
@@ -259,12 +259,45 @@
 </main>
 
 <style>
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f7fafc;
+    --bg-card: #ffffff;
+    --text-primary: #1a202c;
+    --text-secondary: #4a5568;
+    --text-muted: #718096;
+    --border-color: #edf2f7;
+    --radar-grid: #ffffff;
+    --radar-label: #a0aec0;
+    --shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    --shadow-inset: inset 0 2px 10px rgba(0,0,0,0.03);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-primary: #1a202c;
+      --bg-secondary: #171923;
+      --bg-card: #2d3748;
+      --text-primary: #f7fafc;
+      --text-secondary: #e2e8f0;
+      --text-muted: #a0aec0;
+      --border-color: #4a5568;
+      --radar-grid: #2d3748;
+      --radar-label: #718096;
+      --shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      --shadow-inset: inset 0 2px 10px rgba(0,0,0,0.2);
+    }
+  }
+
   main {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     max-width: 1400px;
     margin: 0 auto;
     padding: 2rem;
-    color: #1a202c;
+    color: var(--text-primary);
+    background-color: var(--bg-primary);
+    min-height: 100vh;
+    transition: background-color 0.3s, color 0.3s;
   }
 
   header {
@@ -277,7 +310,7 @@
     font-size: 3rem;
     letter-spacing: -0.04em;
     margin-bottom: 2rem;
-    background: linear-gradient(135deg, #1a202c 0%, #4a5568 100%);
+    background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
@@ -288,15 +321,18 @@
     justify-content: center;
     align-items: center;
     flex-wrap: wrap;
-    background: #fff;
+    background: var(--bg-card);
     padding: 1rem 2rem;
     border-radius: 16px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border-color);
   }
 
   .search-input {
     padding: 0.75rem 1.25rem;
-    border: 2px solid #edf2f7;
+    border: 2px solid var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-primary);
     border-radius: 10px;
     min-width: 300px;
     font-size: 1rem;
@@ -318,16 +354,17 @@
   .filter-group label {
     font-size: 0.875rem;
     font-weight: 700;
-    color: #718096;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
   select {
     padding: 0.6rem 2.5rem 0.6rem 1rem;
-    border: 2px solid #edf2f7;
+    border: 2px solid var(--border-color);
     border-radius: 10px;
-    background-color: white;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
     font-size: 0.875rem;
     cursor: pointer;
     font-weight: 600;
@@ -342,18 +379,26 @@
     display: flex;
     justify-content: center;
     margin-bottom: 4rem;
-    background: #f7fafc;
+    background: var(--bg-secondary);
     border-radius: 32px;
     padding: 3rem;
-    box-shadow: inset 0 2px 10px rgba(0,0,0,0.03);
+    box-shadow: var(--shadow-inset);
   }
 
   .quad-label {
     font-size: 14px;
-    fill: #a0aec0;
+    fill: var(--radar-label);
     font-weight: 900;
     pointer-events: none;
     letter-spacing: 0.15em;
+  }
+
+  .radar-ring {
+    stroke: var(--radar-grid);
+  }
+
+  .radar-divider {
+    stroke: var(--radar-grid);
   }
 
   .blip path, .blip circle {
@@ -362,14 +407,14 @@
   }
 
   .blip.hovered circle, .blip.hovered path {
-    stroke: #1a202c;
+    stroke: var(--text-primary);
     stroke-width: 2;
     transform: scale(1.2);
   }
 
   .blip-text {
     font-size: 10px;
-    fill: #2d3748;
+    fill: var(--text-primary);
     font-weight: 700;
     pointer-events: none;
     opacity: 0;
@@ -405,13 +450,13 @@
     padding: 1.25rem;
     border-radius: 16px;
     transition: all 0.2s;
-    background: #fff;
-    border: 2px solid #edf2f7;
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
   }
 
   .entry-item.active {
     border-color: #4299e1;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow);
     transform: translateY(-4px);
   }
 
@@ -425,50 +470,50 @@
 
   strong {
     font-size: 1.25rem;
-    color: #1a202c;
+    color: var(--text-primary);
     letter-spacing: -0.01em;
   }
 
   .description {
     font-size: 0.95rem;
-    color: #4a5568;
+    color: var(--text-secondary);
     line-height: 1.6;
     margin-bottom: 1rem;
   }
 
   .quadrant-tag {
     display: inline-block;
-    background: #edf2f7;
+    background: var(--bg-secondary);
     padding: 4px 12px;
     border-radius: 9999px;
     font-size: 0.7rem;
     font-weight: 800;
-    color: #4a5568;
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
   .tag {
     display: inline-block;
-    background: #e2e8f0;
+    background: var(--bg-secondary);
     padding: 4px 10px;
     border-radius: 6px;
     font-size: 0.7rem;
     font-weight: 700;
-    color: #2d3748;
+    color: var(--text-secondary);
     margin-right: 0.5rem;
   }
 
   .history {
     margin-top: 1rem;
     padding-top: 1rem;
-    border-top: 1px dashed #e2e8f0;
+    border-top: 1px dashed var(--border-color);
   }
 
   .history h4 {
     font-size: 0.75rem;
     text-transform: uppercase;
-    color: #a0aec0;
+    color: var(--text-muted);
     margin-bottom: 0.5rem;
     letter-spacing: 0.1em;
   }
@@ -481,13 +526,13 @@
 
   .history li {
     font-size: 0.8rem;
-    color: #718096;
+    color: var(--text-muted);
     margin-bottom: 0.4rem;
   }
 
   .date {
     font-weight: 600;
-    color: #4a5568;
+    color: var(--text-secondary);
   }
 
   .ring-tag {
