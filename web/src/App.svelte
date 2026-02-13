@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fade, fly } from 'svelte/transition';
 
   interface HistoryEntry {
     date: string;
@@ -31,6 +32,7 @@
   let selectedRing = $state('all');
   let selectedTag = $state('all');
   let hoveredEntry: string | null = $state(null);
+  let selectedEntry: Entry | null = $state(null);
 
   const quadrants = ['languages', 'frameworks', 'tools', 'platforms'];
   const rings = ['adopt', 'trial', 'assess', 'hold'];
@@ -218,6 +220,8 @@
                   class:active={hoveredEntry === entry.name}
                   onmouseenter={() => hoveredEntry = entry.name}
                   onmouseleave={() => hoveredEntry = null}
+                  onclick={() => selectedEntry = entry}
+                  onkeydown={(e) => e.key === 'Enter' && (selectedEntry = entry)}
                   role="listitem"
                   tabindex="0"
                 >
@@ -256,9 +260,221 @@
       {/each}
     </div>
   {/if}
+
+  {#if selectedEntry}
+    <div class="modal-backdrop" transition:fade onclick={() => selectedEntry = null}>
+      <div class="modal-content" transition:fly={{ y: 20, duration: 300 }} onclick|stopPropagation>
+        <button class="close-btn" onclick={() => selectedEntry = null}>&times;</button>
+        
+        <header class="modal-header">
+          <div class="modal-title-row">
+            <h1>{selectedEntry.name}</h1>
+            <span class="ring-tag-large" style="background: {colors[selectedEntry.ring as keyof typeof colors]}20; color: {colors[selectedEntry.ring as keyof typeof colors]}">
+              {selectedEntry.ring.toUpperCase()}
+            </span>
+          </div>
+          <div class="modal-meta">
+            <span class="quadrant-tag">{selectedEntry.quadrant}</span>
+            {#each selectedEntry.tags || [] as tag}
+              <span class="tag">{tag}</span>
+            {/each}
+          </div>
+        </header>
+
+        <div class="modal-body">
+          <section class="description-section">
+            <h3>About</h3>
+            <p>{selectedEntry.description}</p>
+            {#if selectedEntry.link}
+              <a href={selectedEntry.link} target="_blank" rel="noopener noreferrer" class="external-link">
+                Learn more ↗
+              </a>
+            {/if}
+          </section>
+
+          {#if selectedEntry.history && selectedEntry.history.length > 0}
+            <section class="history-section">
+              <h3>History</h3>
+              <div class="history-timeline">
+                {#each selectedEntry.history.slice().reverse() as h}
+                  <div class="history-card">
+                    <div class="history-header">
+                      <span class="history-date">{formatDate(h.date)}</span>
+                      <span class="ring-tag-small" style="background: {colors[h.ring as keyof typeof colors]}15; color: {colors[h.ring as keyof typeof colors]}">
+                        {h.ring}
+                      </span>
+                    </div>
+                    {#if h.reason}
+                      <p class="history-reason">{h.reason}</p>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </section>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
 </main>
 
 <style>
+  /* ... previous styles ... */
+
+  .modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+    padding: 2rem;
+  }
+
+  .modal-content {
+    background: var(--bg-card);
+    width: 100%;
+    max-width: 800px;
+    max-height: 90vh;
+    border-radius: 24px;
+    position: relative;
+    padding: 3rem;
+    overflow-y: auto;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--border-color);
+  }
+
+  .close-btn {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0.5rem;
+    transition: color 0.2s;
+  }
+
+  .close-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .modal-header {
+    margin-bottom: 2.5rem;
+    text-align: left;
+  }
+
+  .modal-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .modal-title-row h1 {
+    margin-bottom: 0;
+    text-align: left;
+  }
+
+  .ring-tag-large {
+    font-size: 1rem;
+    font-weight: 800;
+    padding: 8px 20px;
+    border-radius: 9999px;
+    letter-spacing: 0.05em;
+  }
+
+  .modal-meta {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+  }
+
+  h3 {
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    margin-bottom: 1.25rem;
+    font-weight: 800;
+  }
+
+  .description-section p {
+    font-size: 1.15rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+  }
+
+  .external-link {
+    display: inline-block;
+    margin-top: 1.5rem;
+    color: #4299e1;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s;
+  }
+
+  .external-link:hover {
+    color: #3182ce;
+    text-decoration: underline;
+  }
+
+  .history-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .history-card {
+    padding: 1.25rem;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    border-left: 4px solid var(--border-color);
+  }
+
+  .history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .history-date {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+  }
+
+  .history-reason {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .ring-tag-small {
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 2px 10px;
+    border-radius: 6px;
+    text-transform: uppercase;
+  }
+
   :root {
     --bg-primary: #ffffff;
     --bg-secondary: #f7fafc;

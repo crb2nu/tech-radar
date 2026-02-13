@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
 	"gopkg.in/yaml.v3"
@@ -14,15 +15,17 @@ import (
 
 // Server handles serving the radar visualization and data.
 type Server struct {
-	port   int
-	assets embed.FS
+	port    int
+	dataDir string
+	assets  embed.FS
 }
 
 // NewServer creates a new Server.
-func NewServer(port int, assets embed.FS) *Server {
+func NewServer(port int, dataDir string, assets embed.FS) *Server {
 	return &Server{
-		port:   port,
-		assets: assets,
+		port:    port,
+		dataDir: dataDir,
+		assets:  assets,
 	}
 }
 
@@ -47,7 +50,7 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) handleRadarData(w http.ResponseWriter, r *http.Request) {
-	data, err := os.ReadFile(".tech-radar/radar.yaml")
+	data, err := os.ReadFile(filepath.Join(s.dataDir, "radar.yaml"))
 	if err != nil {
 		http.Error(w, "Radar not initialized", http.StatusNotFound)
 		return

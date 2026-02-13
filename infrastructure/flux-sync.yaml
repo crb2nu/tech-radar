@@ -1,0 +1,27 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: tech-radar
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: https://gitlab.flexinfer.ai/services/tech-radar.git
+  ref:
+    branch: main
+  secretRef:
+    name: gitops-gitlab
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: tech-radar
+  namespace: flux-system
+spec:
+  interval: 5m
+  targetNamespace: tech-radar
+  sourceRef:
+    kind: GitRepository
+    name: tech-radar
+  path: "./infrastructure/radar/overlays/prod"
+  prune: true
+  wait: true

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -17,14 +18,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var version = "dev"
+var (
+	version = "dev"
+	dataDir string
+)
 
 func main() {
 	rootCmd := &cobra.Command{
 		Use:     "radar",
 		Short:   "Tech Radar - Personal technology decision tracker",
 		Version: version,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// Ensure dataDir is absolute if possible, but for now just use it
+		},
 	}
+
+	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", ".tech-radar", "Directory for radar data and config")
 
 	rootCmd.AddCommand(initCmd())
 	rootCmd.AddCommand(addCmd())
@@ -44,13 +53,11 @@ func initCmd() *cobra.Command {
 		Use:   "init",
 		Short: "Initialize tech radar configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			radarDir := ".tech-radar"
-
-			if err := os.MkdirAll(radarDir, 0755); err != nil {
+			if err := os.MkdirAll(dataDir, 0755); err != nil {
 				return err
 			}
 
-			// Create default radar
+			// ... (default radar setup)
 			radar := types.Radar{
 				Meta: types.RadarMeta{
 					Name:    "Personal Tech Radar",
@@ -84,7 +91,7 @@ func initCmd() *cobra.Command {
 				return err
 			}
 
-			if err := os.WriteFile(radarDir+"/radar.yaml", radarData, 0644); err != nil {
+			if err := os.WriteFile(filepath.Join(dataDir, "radar.yaml"), radarData, 0644); err != nil {
 				return err
 			}
 
@@ -120,11 +127,11 @@ func initCmd() *cobra.Command {
 				return err
 			}
 
-			if err := os.WriteFile(radarDir+"/config.yaml", configData, 0644); err != nil {
+			if err := os.WriteFile(filepath.Join(dataDir, "config.yaml"), configData, 0644); err != nil {
 				return err
 			}
 
-			fmt.Printf("Initialized tech radar in %s/\n", radarDir)
+			fmt.Printf("Initialized tech radar in %s/\n", dataDir)
 			return nil
 		},
 	}
@@ -466,7 +473,7 @@ func serveCmd() *cobra.Command {
 		Use:   "serve",
 		Short: "Serve interactive radar",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			server := radar.NewServer(port, techradar.UI)
+			server := radar.NewServer(port, dataDir, techradar.UI)
 			return server.Start()
 		},
 	}
