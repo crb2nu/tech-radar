@@ -263,7 +263,7 @@
 
   {#if selectedEntry}
     <div class="modal-backdrop" transition:fade onclick={() => selectedEntry = null}>
-      <div class="modal-content" transition:fly={{ y: 20, duration: 300 }} onclick|stopPropagation>
+      <div class="modal-content" transition:fly={{ y: 20, duration: 300 }} onclick={(event) => event.stopPropagation()}>
         <button class="close-btn" onclick={() => selectedEntry = null}>&times;</button>
         
         <header class="modal-header">
@@ -769,5 +769,3 @@
     box-shadow: 0 4px 6px rgba(0,0,0,0.05);
   }
 </style>
-
-

@@ -1,0 +1,78 @@
+stages:
+  - lint
+  - test
+  - build
+
+variables:
+  GO_VERSION: "1.24"
+  GOTOOLCHAIN: "local"
+  CGO_ENABLED: "0"
+
+default:
+  interruptible: true
+
+.go-env: &go-env
+  image: registry.harbor.lan/library/golang:${GO_VERSION}
+  before_script:
+    - mkdir -p .cache/gomod .cache/gobuild
+    - export GOMODCACHE="$CI_PROJECT_DIR/.cache/gomod"
+    - export GOCACHE="$CI_PROJECT_DIR/.cache/gobuild"
+    - go version
+
+cache:
+  key:
+    files:
+      - go.sum
+      - web/pnpm-lock.yaml
+  paths:
+    - .cache/gomod/
+    - .cache/gobuild/
+    - web/.pnpm-store/
+
+fmt:
+  stage: lint
+  <<: *go-env
+  script:
+    - test -z "$(gofmt -l $(git ls-files '*.go'))"
+
+vet:
+  stage: lint
+  <<: *go-env
+  script:
+    - go vet ./...
+
+test:
+  stage: test
+  <<: *go-env
+  script:
+    - go test ./... -count=1
+
+build:frontend:
+  stage: build
+  image: registry.harbor.lan/dockerhub-cache/library/node:20-alpine
+  script:
+    - cd web
+    - corepack enable
+    - corepack prepare pnpm@10.13.1 --activate
+    - pnpm config set store-dir .pnpm-store
+    - pnpm install --frozen-lockfile
+    - pnpm build
+  artifacts:
+    paths:
+      - web/dist/
+    expire_in: 1 week
+
+build:backend:
+  stage: build
+  <<: *go-env
+  needs:
+    - build:frontend
+  script:
+    - mkdir -p bin
+    - go build -o bin/radar ./cmd/radar
+    - ./bin/radar --help >/dev/null
+  artifacts:
+    paths:
+      - bin/radar
+      - web/dist/
+    expire_in: 1 week
