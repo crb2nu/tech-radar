@@ -84,8 +84,8 @@ type VisualizationConfig struct {
 
 // ScanResult represents technologies found in a project.
 type ScanResult struct {
-	Path         string            `json:"path"`
-	Technologies []DiscoveredTech  `json:"technologies"`
+	Path         string              `json:"path"`
+	Technologies []DiscoveredTech    `json:"technologies"`
 	Files        map[string][]string `json:"files"` // File -> deps
 }
 

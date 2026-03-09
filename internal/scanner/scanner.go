@@ -220,7 +220,7 @@ func (s *Scanner) parseRequirementsTxt(path string) ([]types.DiscoveredTech, err
 			}
 		}
 		name = strings.TrimSpace(name)
-		
+
 		if name != "" {
 			techs = append(techs, types.DiscoveredTech{
 				Name:    name,

@@ -17,6 +17,8 @@ default:
     - mkdir -p .cache/gomod .cache/gobuild
     - export GOMODCACHE="$CI_PROJECT_DIR/.cache/gomod"
     - export GOCACHE="$CI_PROJECT_DIR/.cache/gobuild"
+    - mkdir -p web/dist
+    - test -f web/dist/index.html || printf '<!doctype html>\n' > web/dist/index.html
     - go version
 
 cache:

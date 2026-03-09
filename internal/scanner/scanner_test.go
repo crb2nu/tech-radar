@@ -69,14 +69,14 @@ numpy
 
 	// Verify results
 	expectedTechs := map[string]bool{
-		"react":                    false,
-		"axios":                    false,
-		"typescript":               false,
-		"github.com/spf13/cobra":   false,
-		"gopkg.in/yaml.v3":         false,
-		"flask":                    false,
-		"requests":                 false,
-		"numpy":                    false,
+		"react":                  false,
+		"axios":                  false,
+		"typescript":             false,
+		"github.com/spf13/cobra": false,
+		"gopkg.in/yaml.v3":       false,
+		"flask":                  false,
+		"requests":               false,
+		"numpy":                  false,
 	}
 
 	for _, tech := range result.Technologies {

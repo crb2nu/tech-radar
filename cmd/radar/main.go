@@ -426,7 +426,7 @@ func renderCmd() *cobra.Command {
 					if len(submatch) > 1 {
 						content, err := techradar.UI.ReadFile("web/dist/radar-assets/" + submatch[1])
 						if err == nil {
-							// For standalone, we might need to strip 'type="module"' if we want it to work 
+							// For standalone, we might need to strip 'type="module"' if we want it to work
 							// in all contexts, but for now just inlining is fine.
 							return "<script>" + string(content) + "</script>"
 						}
