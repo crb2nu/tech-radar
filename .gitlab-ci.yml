@@ -2,6 +2,7 @@ stages:
   - lint
   - test
   - build
+  - deploy
 
 variables:
   GO_VERSION: "1.25.7"
@@ -79,3 +80,21 @@ build:backend:
       - bin/radar
       - web/dist/
     expire_in: 1 week
+
+build:container:
+  stage: deploy
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  needs:
+    - build:frontend
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n $CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD | base64)\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/Dockerfile
+      --destination $CI_REGISTRY_IMAGE:latest
+      --destination $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  only:
+    - main
