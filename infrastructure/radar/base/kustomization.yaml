@@ -8,6 +8,7 @@ resources:
   - service.yaml
   - ingress.yaml
   - postgres.yaml
+  - meilisearch.yaml
 
 secretGenerator:
   - name: tech-radar-db-urls

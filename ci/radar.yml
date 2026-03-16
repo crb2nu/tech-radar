@@ -1,0 +1,25 @@
+# GitLab CI Template for Tech Radar Ingestion
+#
+# Usage in your project's .gitlab-ci.yml:
+#   include:
+#     - project: 'services/tech-radar'
+#       file: '/ci/radar.yml'
+#
+#   stages: [..., scan]
+#
+#   radar-scan:
+#     extends: .radar-scan
+
+variables:
+  RADAR_API_URL: "http://techradar.flexinfer.ai/api/v1/ingest"
+  RADAR_IMAGE: "registry.flexinfer.ai/mcp/tech-radar:latest"
+
+.radar-scan:
+  stage: test
+  image: $RADAR_IMAGE
+  script:
+    - /app/radar scan . --publish --api-url "$RADAR_API_URL" --project "$CI_PROJECT_PATH"
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "schedule"

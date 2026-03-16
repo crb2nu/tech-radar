@@ -34,6 +34,10 @@ spec:
                 secretKeyRef:
                   name: tech-radar-db-urls
                   key: database-url
+            - name: MEILI_URL
+              value: "http://meilisearch:7700"
+            - name: MEILI_MASTER_KEY
+              value: "masterKey"
           ports:
             - containerPort: 8088
               name: http

@@ -65,6 +65,23 @@
     }) || []
   );
 
+  async function handleSearch() {
+    if (searchQuery.length < 2) {
+      // Local filter for short queries
+      return;
+    }
+    try {
+      const response = await fetch(`/api/v1/search?q=${encodeURIComponent(searchQuery)}`);
+      if (response.ok) {
+        const results = await response.json();
+        // Update radar entries with search results if needed
+        // For now, we'll stick to local filtering but leverage the API for backend validation
+      }
+    } catch (e) {
+      console.error('Search failed', e);
+    }
+  }
+
   onMount(async () => {
     // @ts-ignore
     if (window.RADAR_DATA) {

@@ -9,7 +9,10 @@ require (
 )
 
 require (
+	github.com/andybalholm/brotli v1.1.1 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lib/pq v1.11.2 // indirect
+	github.com/meilisearch/meilisearch-go v0.36.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 )
