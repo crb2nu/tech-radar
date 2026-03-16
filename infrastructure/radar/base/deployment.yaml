@@ -23,7 +23,7 @@ spec:
               mountPath: /data
       containers:
         - name: tech-radar
-          image: registry.flexinfer.ai/services/tech-radar:latest
+          image: registry.flexinfer.ai/library/tech-radar:latest
           imagePullPolicy: Always
           env:
             - name: DATABASE_URL

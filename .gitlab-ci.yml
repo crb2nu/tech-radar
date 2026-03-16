@@ -89,7 +89,7 @@ build:container:
   needs:
     - build:frontend
   variables:
-    IMAGE_NAME: "registry.flexinfer.ai/services/tech-radar"
+    IMAGE_NAME: "registry.flexinfer.ai/library/tech-radar"
   script:
     - mkdir -p /kaniko/.docker
     - |
