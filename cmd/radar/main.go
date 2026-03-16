@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -245,7 +246,13 @@ func addCmd() *cobra.Command {
 }
 
 func scanCmd() *cobra.Command {
-	var autoAdd bool
+	var (
+		autoAdd bool
+		publish bool
+		apiURL  string
+		apiKey  string
+		project string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "scan [paths...]",
@@ -276,6 +283,23 @@ func scanCmd() *cobra.Command {
 					fmt.Printf("  - %s (%s)\n", tech.Name, tech.Source)
 				}
 
+				if publish {
+					if apiURL == "" {
+						return fmt.Errorf("--publish requires --api-url")
+					}
+					// Send to API
+					scanResult := types.ScanResult{
+						ProjectID:    project,
+						Path:         path,
+						Technologies: result.Technologies,
+					}
+					if err := publishResult(apiURL, apiKey, scanResult); err != nil {
+						fmt.Printf("Error publishing results: %v\n", err)
+					} else {
+						fmt.Println("Successfully published results to central server")
+					}
+				}
+
 				if autoAdd && len(result.Technologies) > 0 {
 					if err := addToRadar(result.Technologies); err != nil {
 						fmt.Printf("Error adding to radar: %v\n", err)
@@ -287,8 +311,42 @@ func scanCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&autoAdd, "auto-add", false, "Automatically add/update discovered technologies")
+	cmd.Flags().BoolVar(&publish, "publish", false, "Publish results to a central radar server")
+	cmd.Flags().StringVar(&apiURL, "api-url", "", "Radar API URL (e.g. http://radar.internal/api/v1/ingest)")
+	cmd.Flags().StringVar(&apiKey, "api-key", "", "API Key for authentication")
+	cmd.Flags().StringVar(&project, "project", "", "Project name/ID for this scan")
 
 	return cmd
+}
+
+func publishResult(apiURL, apiKey string, result types.ScanResult) error {
+	data, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, apiURL, strings.NewReader(string(data)))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server returned status: %s", resp.Status)
+	}
+
+	return nil
 }
 
 func addToRadar(techs []types.DiscoveredTech) error {

@@ -1,0 +1,189 @@
+package db
+
+import (
+	"database/sql"
+	"fmt"
+
+	"github.com/lib/pq"
+	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
+)
+
+// DB handles database operations.
+type DB struct {
+	pool *sql.DB
+}
+
+// New creates a new DB connection.
+func New(dataSourceName string) (*DB, error) {
+	db, err := sql.Open("postgres", dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+
+	return &DB{pool: db}, nil
+}
+
+// GetRadar fetches a radar by ID.
+func (d *DB) GetRadar(id string) (*types.Radar, error) {
+	var radar types.Radar
+	err := d.pool.QueryRow(`
+		SELECT id, name, updated_at, version 
+		FROM radars WHERE id = $1 OR (name = 'default' AND $1 = 'default')
+		LIMIT 1
+	`, id).Scan(&radar.ID, &radar.Meta.Name, &radar.Meta.Updated, &radar.Meta.Version)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("radar not found: %s", id)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch entries
+	rows, err := d.pool.Query(`
+		SELECT id, name, quadrant, ring, description, moved, link, tags
+		FROM entries WHERE radar_id = $1
+	`, radar.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var e types.Entry
+		err := rows.Scan(&e.ID, &e.Name, &e.Quadrant, &e.Ring, &e.Description, &e.Moved, &e.Link, (*pq.StringArray)(&e.Tags))
+		if err != nil {
+			return nil, err
+		}
+
+		// Fetch history for each entry
+		hRows, err := d.pool.Query(`
+			SELECT date, ring, reason, author FROM entry_history 
+			WHERE entry_id = $1 ORDER BY date DESC
+		`, e.ID)
+		if err == nil {
+			for hRows.Next() {
+				var h types.HistoryEntry
+				if err := hRows.Scan(&h.Date, &h.Ring, &h.Reason, &h.Author); err == nil {
+					e.History = append(e.History, h)
+				}
+			}
+			hRows.Close()
+		}
+
+		radar.Entries = append(radar.Entries, e)
+	}
+
+	return &radar, nil
+}
+
+// SaveScan records a project scan result.
+func (d *DB) SaveScan(result types.ScanResult) error {
+	tx, err := d.pool.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Ensure project exists or update last_scan
+	var projectID string
+	err = tx.QueryRow(`
+		INSERT INTO projects (name, last_scan) 
+		VALUES ($1, CURRENT_TIMESTAMP)
+		ON CONFLICT (name) DO UPDATE SET last_scan = CURRENT_TIMESTAMP
+		RETURNING id
+	`, result.ProjectID).Scan(&projectID)
+	if err != nil {
+		// Try to get existing ID if conflict didn't return it (depends on PG version/config)
+		err = tx.QueryRow("SELECT id FROM projects WHERE name = $1", result.ProjectID).Scan(&projectID)
+		if err != nil {
+			return err
+		}
+	}
+
+	// 2. Clear old project_technologies
+	_, err = tx.Exec("DELETE FROM project_technologies WHERE project_id = $1", projectID)
+	if err != nil {
+		return err
+	}
+
+	// 3. Insert new project_technologies
+	for _, tech := range result.Technologies {
+		_, err = tx.Exec(`
+			INSERT INTO project_technologies (project_id, tech_name, version, source)
+			VALUES ($1, $2, $3, $4)
+		`, projectID, tech.Name, tech.Version, tech.Source)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// UpsertEntry adds or updates a radar entry and records history.
+func (d *DB) UpsertEntry(entry types.Entry) error {
+	tx, err := d.pool.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Ensure radar exists (assume default for now if not specified)
+	var radarID string
+	err = tx.QueryRow("SELECT id FROM radars LIMIT 1").Scan(&radarID)
+	if err != nil {
+		// Create default radar
+		err = tx.QueryRow("INSERT INTO radars (name) VALUES ('default') RETURNING id").Scan(&radarID)
+		if err != nil {
+			return err
+		}
+	}
+
+	// 2. Check if entry exists
+	var existingID string
+	var existingRing string
+	err = tx.QueryRow("SELECT id, ring FROM entries WHERE name = $1 AND radar_id = $2", entry.Name, radarID).Scan(&existingID, &existingRing)
+
+	if err == sql.ErrNoRows {
+		// Insert new entry
+		err = tx.QueryRow(`
+			INSERT INTO entries (radar_id, name, quadrant, ring, description, moved, link, tags)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			RETURNING id
+		`, radarID, entry.Name, entry.Quadrant, entry.Ring, entry.Description, entry.Moved, entry.Link, pq.StringArray(entry.Tags)).Scan(&existingID)
+	} else if err == nil {
+		// Update existing entry
+		_, err = tx.Exec(`
+			UPDATE entries SET 
+				quadrant = $1, ring = $2, description = $3, moved = $4, link = $5, tags = $6, updated_at = CURRENT_TIMESTAMP
+			WHERE id = $7
+		`, entry.Quadrant, entry.Ring, entry.Description, entry.Moved, entry.Link, pq.StringArray(entry.Tags), existingID)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	// 3. Add to history if ring changed or new entry
+	if existingRing != string(entry.Ring) {
+		_, err = tx.Exec(`
+			INSERT INTO entry_history (entry_id, ring, reason, author)
+			VALUES ($1, $2, $3, $4)
+		`, existingID, entry.Ring, entry.Description, "admin")
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// Close closes the database connection.
+func (d *DB) Close() error {
+	return d.pool.Close()
+}

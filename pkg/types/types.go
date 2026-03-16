@@ -26,6 +26,7 @@ const (
 
 // Entry represents a single technology on the radar.
 type Entry struct {
+	ID          string         `yaml:"id" json:"id"`
 	Name        string         `yaml:"name" json:"name"`
 	Quadrant    Quadrant       `yaml:"quadrant" json:"quadrant"`
 	Ring        Ring           `yaml:"ring" json:"ring"`
@@ -34,6 +35,7 @@ type Entry struct {
 	Link        string         `yaml:"link,omitempty" json:"link,omitempty"`
 	Tags        []string       `yaml:"tags,omitempty" json:"tags,omitempty"`
 	History     []HistoryEntry `yaml:"history,omitempty" json:"history,omitempty"`
+	ProjectIDs  []string       `yaml:"project_ids,omitempty" json:"project_ids,omitempty"`
 }
 
 // HistoryEntry records a change in an entry's position.
@@ -41,10 +43,12 @@ type HistoryEntry struct {
 	Date   time.Time `yaml:"date" json:"date"`
 	Ring   Ring      `yaml:"ring" json:"ring"`
 	Reason string    `yaml:"reason,omitempty" json:"reason,omitempty"`
+	Author string    `yaml:"author,omitempty" json:"author,omitempty"`
 }
 
 // Radar represents the complete tech radar.
 type Radar struct {
+	ID      string    `yaml:"id" json:"id"`
 	Meta    RadarMeta `yaml:"meta" json:"meta"`
 	Entries []Entry   `yaml:"entries" json:"entries"`
 }
@@ -54,6 +58,24 @@ type RadarMeta struct {
 	Name    string    `yaml:"name" json:"name"`
 	Updated time.Time `yaml:"updated" json:"updated"`
 	Version string    `yaml:"version,omitempty" json:"version,omitempty"`
+}
+
+// Project represents a scanned repository or application.
+type Project struct {
+	ID           string           `json:"id"`
+	Name         string           `json:"name"`
+	URL          string           `json:"url,omitempty"`
+	LastScan     time.Time        `json:"last_scan"`
+	Technologies []DiscoveredTech `json:"technologies"`
+}
+
+// APIKey represents a machine token for ingestion.
+type APIKey struct {
+	ID        string    `json:"id"`
+	Key       string    `json:"key"` // Hashed in DB
+	Name      string    `json:"name"`
+	ProjectID string    `json:"project_id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Config holds scanner and visualization configuration.
@@ -84,6 +106,7 @@ type VisualizationConfig struct {
 
 // ScanResult represents technologies found in a project.
 type ScanResult struct {
+	ProjectID    string              `json:"project_id"`
 	Path         string              `json:"path"`
 	Technologies []DiscoveredTech    `json:"technologies"`
 	Files        map[string][]string `json:"files"` // File -> deps
