@@ -7,3 +7,9 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+  - postgres.yaml
+
+secretGenerator:
+  - name: tech-radar-db-urls
+    literals:
+      - database-url=postgres://postgres:password@postgres:5432/techradar?sslmode=disable
