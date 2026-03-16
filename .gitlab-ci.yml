@@ -7,6 +7,7 @@ variables:
   GO_VERSION: "1.25.7"
   GOTOOLCHAIN: "local"
   CGO_ENABLED: "0"
+  GOPROXY: "https://proxy.golang.org,direct"
 
 default:
   interruptible: true
