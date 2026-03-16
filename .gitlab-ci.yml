@@ -95,8 +95,13 @@ build:container:
   script:
     - mkdir -p "$DOCKER_CONFIG"
     - |
-      printf '{"auths":{"%s":{"username":"%s","password":"%s"}}}' \
-        "$IMAGE_REGISTRY" "$HARBOR_USERNAME" "$HARBOR_PASSWORD" > "$DOCKER_CONFIG/config.json"
+      if [ -f /docker-secrets/config.json ]; then
+        echo "Using pre-configured docker secrets"
+        cp /docker-secrets/config.json "$DOCKER_CONFIG/config.json"
+      else
+        printf '{"auths":{"%s":{"username":"%s","password":"%s"}}}' \
+          "$IMAGE_REGISTRY" "$HARBOR_USERNAME" "$HARBOR_PASSWORD" > "$DOCKER_CONFIG/config.json"
+      fi
     - export IMAGE="$IMAGE_REGISTRY/$IMAGE_REPO"
     - /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/Dockerfile" --destination "$IMAGE:latest" --destination "$IMAGE:$CI_COMMIT_SHORT_SHA"
   only:
