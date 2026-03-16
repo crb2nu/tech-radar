@@ -1,6 +1,6 @@
 # Binaries
 bin/
-radar
+/radar
 
 # Go
 *.test
@@ -24,6 +24,10 @@ web/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Build & Cache
+.cache/
+docs/
 
 # Generated
 radar-assets/

@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tech-radar
+  labels:
+    app: tech-radar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tech-radar
+  template:
+    metadata:
+      labels:
+        app: tech-radar
+    spec:
+      initContainers:
+        - name: init-radar
+          image: registry.flexinfer.ai/services/tech-radar:latest
+          command: ["sh", "-c", "if [ ! -f /data/radar.yaml ]; then ./radar init --data-dir /data; fi"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: tech-radar
+          image: registry.flexinfer.ai/services/tech-radar:latest
+          imagePullPolicy: Always
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: tech-radar-db-urls
+                  key: database-url
+          ports:
+            - containerPort: 8088
+              name: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /api/radar
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/radar
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: tech-radar-data
