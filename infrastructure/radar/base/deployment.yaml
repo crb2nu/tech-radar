@@ -16,7 +16,7 @@ spec:
     spec:
       initContainers:
         - name: init-radar
-          image: registry.flexinfer.ai/services/tech-radar:latest
+          image: registry.flexinfer.ai/mcp/tech-radar:latest
           command: ["sh", "-c", "if [ ! -f /data/radar.yaml ]; then ./radar init --data-dir /data; fi"]
           volumeMounts:
             - name: data
