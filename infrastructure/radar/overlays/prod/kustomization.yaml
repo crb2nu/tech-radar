@@ -6,5 +6,5 @@ resources:
 
 images:
   - name: registry.flexinfer.ai/library/tech-radar
-    newName: registry.flexinfer.ai/library/tech-radar
+    newName: registry.flexinfer.ai/mcp/tech-radar
     newTag: latest

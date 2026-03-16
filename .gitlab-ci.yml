@@ -90,7 +90,7 @@ build:container:
     - build:frontend
   variables:
     IMAGE_REGISTRY: "registry.harbor.lan"
-    IMAGE_REPO: "library/tech-radar"
+    IMAGE_REPO: "mcp/tech-radar"
     DOCKER_CONFIG: "/kaniko/.docker"
   script:
     - mkdir -p "$DOCKER_CONFIG"
