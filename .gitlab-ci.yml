@@ -93,7 +93,7 @@ build:container:
   script:
     - mkdir -p /kaniko/.docker
     - |
-      AUTH=$(echo -n "${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')
+      AUTH=$(echo -n "${HARBOR_USERNAME}:${HARBOR_PASSWORD}" | base64 | tr -d '\n')
       echo "{\"auths\":{\"registry.flexinfer.ai\":{\"auth\":\"${AUTH}\"}}}" > /kaniko/.docker/config.json
     - /kaniko/executor
       --context $CI_PROJECT_DIR
