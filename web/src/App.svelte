@@ -6,9 +6,11 @@
     date: string;
     ring: string;
     reason: string;
+    author?: string;
   }
 
   interface Entry {
+    id: string;
     name: string;
     quadrant: string;
     ring: string;
@@ -16,9 +18,11 @@
     moved: number; // -1, 0, 1
     tags?: string[];
     history?: HistoryEntry[];
+    project_ids?: string[];
   }
 
   interface Radar {
+    id: string;
     meta: {
       name: string;
     };
@@ -69,7 +73,12 @@
       return;
     }
     try {
-      const response = await fetch('/api/radar');
+      // Try v1 first, then legacy
+      let response = await fetch('/api/v1/radar');
+      if (!response.ok || response.status === 404) {
+        response = await fetch('/api/radar');
+      }
+      
       if (!response.ok) {
         throw new Error('Failed to fetch radar data');
       }
@@ -228,6 +237,9 @@
                   <div class="entry-header">
                     <strong>{entry.name}</strong>
                     <div>
+                      {#if entry.project_ids && entry.project_ids.length > 0}
+                        <span class="usage-tag">Used by {entry.project_ids.length}</span>
+                      {/if}
                       {#each entry.tags || [] as tag}
                         <span class="tag">{tag}</span>
                       {/each}
@@ -244,6 +256,9 @@
                           <li>
                             <span class="date">{formatDate(h.date)}</span>: 
                             <span class="ring-tag" style="background: {colors[h.ring as keyof typeof colors]}15; color: {colors[h.ring as keyof typeof colors]}">{h.ring}</span>
+                            {#if h.author}
+                              <span class="author">by {h.author}</span>
+                            {/if}
                             {#if h.reason}
                               <span class="reason">— {h.reason}</span>
                             {/if}
@@ -695,6 +710,25 @@
     color: var(--text-secondary);
     line-height: 1.6;
     margin-bottom: 1rem;
+  }
+
+  .usage-tag {
+    display: inline-block;
+    background: #ebf8ff;
+    color: #2b6cb0;
+    padding: 4px 12px;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 0.5rem;
+  }
+
+  .author {
+    font-style: italic;
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
   }
 
   .quadrant-tag {
