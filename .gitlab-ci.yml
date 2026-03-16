@@ -84,21 +84,21 @@ build:backend:
 build:container:
   stage: deploy
   image:
-    name: gcr.io/kaniko-project/executor:debug
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
     entrypoint: [""]
   needs:
     - build:frontend
   variables:
-    IMAGE_NAME: "registry.flexinfer.ai/library/tech-radar"
+    IMAGE_REGISTRY: "registry.harbor.lan"
+    IMAGE_REPO: "library/tech-radar"
+    DOCKER_CONFIG: "/kaniko/.docker"
   script:
-    - mkdir -p /kaniko/.docker
+    - mkdir -p "$DOCKER_CONFIG"
     - |
-      AUTH=$(echo -n "${HARBOR_USERNAME}:${HARBOR_PASSWORD}" | base64 | tr -d '\n')
-      echo "{\"auths\":{\"registry.flexinfer.ai\":{\"auth\":\"${AUTH}\"}}}" > /kaniko/.docker/config.json
-    - /kaniko/executor
-      --context $CI_PROJECT_DIR
-      --dockerfile $CI_PROJECT_DIR/Dockerfile
-      --destination $IMAGE_NAME:latest
-      --destination $IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+      printf '{"auths":{"%s":{"username":"%s","password":"%s"}}}' \
+        "$IMAGE_REGISTRY" "$HARBOR_USERNAME" "$HARBOR_PASSWORD" > "$DOCKER_CONFIG/config.json"
+    - export IMAGE="$IMAGE_REGISTRY/$IMAGE_REPO"
+    - /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/Dockerfile" --destination "$IMAGE:latest" --destination "$IMAGE:$CI_COMMIT_SHORT_SHA"
   only:
     - main
+
