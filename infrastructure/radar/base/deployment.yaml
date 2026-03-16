@@ -6,6 +6,8 @@ metadata:
     app: tech-radar
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: tech-radar
