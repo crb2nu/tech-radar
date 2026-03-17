@@ -158,6 +158,23 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(res)
 }
 
+// GetProjects returns all projects and their discovered technologies.
+func (s *Server) GetProjects(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		http.Error(w, "Database not configured", http.StatusInternalServerError)
+		return
+	}
+
+	projects, err := s.db.GetProjects()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(projects)
+}
+
 // GetRadar returns the radar data.
 func (s *Server) GetRadar(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")

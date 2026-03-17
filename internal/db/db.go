@@ -81,6 +81,41 @@ func (d *DB) GetRadar(id string) (*types.Radar, error) {
 	return &radar, nil
 }
 
+// GetProjects fetches all projects and their technologies.
+func (d *DB) GetProjects() ([]types.Project, error) {
+	rows, err := d.pool.Query("SELECT id, name, url, last_scan FROM projects ORDER BY name ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var projects []types.Project
+	for rows.Next() {
+		var p types.Project
+		var url sql.NullString
+		if err := rows.Scan(&p.ID, &p.Name, &url, &p.LastScan); err != nil {
+			return nil, err
+		}
+		p.URL = url.String
+
+		// Fetch technologies for this project
+		tRows, err := d.pool.Query("SELECT tech_name, version, source FROM project_technologies WHERE project_id = $1", p.ID)
+		if err == nil {
+			for tRows.Next() {
+				var t types.DiscoveredTech
+				if err := tRows.Scan(&t.Name, &t.Version, &t.Source); err == nil {
+					p.Technologies = append(p.Technologies, t)
+				}
+			}
+			tRows.Close()
+		}
+
+		projects = append(projects, p)
+	}
+
+	return projects, nil
+}
+
 // SaveScan records a project scan result.
 func (d *DB) SaveScan(result types.ScanResult) error {
 	tx, err := d.pool.Begin()

@@ -346,6 +346,12 @@ func publishResult(apiURL, apiKey string, result types.ScanResult) error {
 		return fmt.Errorf("server returned status: %s", resp.Status)
 	}
 
+	// Check if response is JSON to avoid false successes from Cloudflare/proxies
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		return fmt.Errorf("server returned non-JSON response (%s), likely intercepted by a proxy or login page", contentType)
+	}
+
 	return nil
 }
 
