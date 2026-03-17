@@ -119,3 +119,17 @@ type DiscoveredTech struct {
 	Version  string   `json:"version,omitempty"`
 	Quadrant Quadrant `json:"quadrant,omitempty"` // If known from mappings
 }
+
+// Insights represents aggregated analytics for the ecosystem.
+type Insights struct {
+	TopUncharted  []UsageStat `json:"top_uncharted"`
+	TopAdopted    []UsageStat `json:"top_adopted"`
+	ProjectsCount int         `json:"projects_count"`
+	TechCount     int         `json:"tech_count"`
+}
+
+// UsageStat represents the usage count of a technology.
+type UsageStat struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}

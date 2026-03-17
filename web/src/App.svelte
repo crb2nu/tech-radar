@@ -31,6 +31,7 @@
 
   let radar: Radar | null = $state(null);
   let projects: any[] = $state([]);
+  let insights: any = $state(null);
   let error: string | null = $state(null);
   let searchQuery = $state('');
   let selectedQuadrant = $state('all');
@@ -118,6 +119,15 @@
     } catch (e) {
       console.error('Failed to fetch projects', e);
     }
+
+    try {
+      const iResponse = await fetch('/api/v1/insights');
+      if (iResponse.ok) {
+        insights = await iResponse.json();
+      }
+    } catch (e) {
+      console.error('Failed to fetch insights', e);
+    }
   });
 
   function getEntriesByRing(ring: string) {
@@ -179,6 +189,9 @@
           </button>
           <button class:active={activeTab === 'projects'} onclick={() => activeTab = 'projects'}>
             <span class="icon">📦</span> Projects
+          </button>
+          <button class:active={activeTab === 'insights'} onclick={() => activeTab = 'insights'}>
+            <span class="icon">🧠</span> Insights
           </button>
           {#if stats.driftCount > 0}
             <button class:active={activeTab === 'drift'} onclick={() => activeTab = 'drift'} class="drift-nav">
@@ -329,7 +342,7 @@
                 {/each}
               </div>
             </div>
-          {:else}
+          {:else if activeTab === 'projects'}
             <div class="project-view" in:fade>
               <div class="project-grid">
                 {#each filteredProjects as project}
@@ -351,6 +364,88 @@
                       {#if project.technologies?.length > 12}
                         <span class="t-tag more">+{project.technologies.length - 12} more</span>
                       {/if}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {:else if activeTab === 'insights'}
+            <div class="insights-view" in:fade>
+              <div class="insights-header">
+                <h2>🧠 Technology Intelligence</h2>
+                <p>Ecosystem analytics driven by live CI/CD pipeline scans.</p>
+              </div>
+
+              {#if insights}
+                <div class="insights-grid">
+                  <!-- Uncharted Tech (Shadow IT) -->
+                  <div class="insight-card highlight">
+                    <h3>Top Uncharted Technologies</h3>
+                    <p class="subtitle">Widely used but not officially tracked on the Radar.</p>
+                    <div class="stats-list">
+                      {#each insights.top_uncharted || [] as stat}
+                        <div class="stat-row">
+                          <span class="t-name">{stat.name}</span>
+                          <span class="t-count" title="{stat.count} projects">
+                            <span class="bar" style="width: {Math.max(5, Math.min(100, (stat.count / insights.projects_count) * 100))}%"></span>
+                            <span class="num">{stat.count}</span>
+                          </span>
+                        </div>
+                      {/each}
+                      {#if (!insights.top_uncharted || insights.top_uncharted.length === 0)}
+                        <p class="empty">No uncharted technologies found. Great job!</p>
+                      {/if}
+                    </div>
+                  </div>
+
+                  <!-- Top Adopted -->
+                  <div class="insight-card">
+                    <h3>Most Adopted Technologies</h3>
+                    <p class="subtitle">Radar technologies with the highest internal usage.</p>
+                    <div class="stats-list">
+                      {#each insights.top_adopted || [] as stat}
+                        <div class="stat-row">
+                          <span class="t-name">{stat.name}</span>
+                          <span class="t-count adopted" title="{stat.count} projects">
+                            <span class="bar" style="width: {Math.max(5, Math.min(100, (stat.count / insights.projects_count) * 100))}%"></span>
+                            <span class="num">{stat.count}</span>
+                          </span>
+                        </div>
+                      {/each}
+                      {#if (!insights.top_adopted || insights.top_adopted.length === 0)}
+                        <p class="empty">No adopted technologies found yet.</p>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {:else}
+                 <div class="loading-state">
+                  <div class="spinner"></div>
+                  <p>Calculating ecosystem insights...</p>
+                </div>
+              {/if}
+            </div>
+          {:else if activeTab === 'drift'}
+            <div class="drift-view" in:fade>
+              <div class="drift-header">
+                <h2>🚨 Technology Drift Detected</h2>
+                <p>The following technologies are marked as <strong>HOLD</strong> but are still being used in active projects.</p>
+              </div>
+              <div class="drift-grid">
+                {#each radar?.entries.filter(e => e.ring === 'hold' && e.project_ids && e.project_ids.length > 0) || [] as entry}
+                  <div class="drift-card" onclick={() => { selectedEntry = entry; activeTab = 'radar'; }} role="button" tabindex="0">
+                    <div class="drift-card-header">
+                      <h3>{entry.name}</h3>
+                      <span class="drift-badge">HOLD</span>
+                    </div>
+                    <p>{entry.description}</p>
+                    <div class="drift-projects">
+                      <span class="label">Detected in {entry.project_ids?.length} projects:</span>
+                      <div class="p-list">
+                        {#each entry.project_ids || [] as pid}
+                          <span class="p-tag">{pid}</span>
+                        {/each}
+                      </div>
                     </div>
                   </div>
                 {/each}
@@ -1116,5 +1211,99 @@
     font-weight: 700;
     color: #ef4444;
     border: 1px solid #ef444430;
+  }
+
+  /* Insights View */
+  .insights-header {
+    margin-bottom: 4rem;
+  }
+
+  .insights-header h2 {
+    font-size: 2.5rem;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    background: linear-gradient(to right, #a855f7, #3b82f6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .insights-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+    gap: 3rem;
+  }
+
+  .insight-card {
+    background: #1e293b;
+    padding: 2.5rem;
+    border-radius: 24px;
+    border: 1px solid #334155;
+  }
+
+  .insight-card.highlight {
+    border-color: #a855f750;
+    box-shadow: 0 10px 30px -10px rgba(168, 85, 247, 0.1);
+  }
+
+  .insight-card h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 800;
+  }
+
+  .insight-card .subtitle {
+    color: #64748b;
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+  }
+
+  .stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .t-name {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: #cbd5e1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .t-count {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .t-count .bar {
+    height: 8px;
+    background: #a855f7;
+    border-radius: 9999px;
+    transition: width 1s ease-out;
+  }
+
+  .t-count.adopted .bar {
+    background: #10b981;
+  }
+
+  .t-count .num {
+    font-weight: 800;
+    font-size: 0.85rem;
+    min-width: 20px;
+  }
+
+  .empty {
+    color: #64748b;
+    font-style: italic;
   }
 </style>

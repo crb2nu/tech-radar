@@ -175,6 +175,23 @@ func (s *Server) GetProjects(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(projects)
 }
 
+// GetInsights returns ecosystem-wide technology adoption analytics.
+func (s *Server) GetInsights(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		http.Error(w, "Database not configured", http.StatusInternalServerError)
+		return
+	}
+
+	insights, err := s.db.GetInsights()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(insights)
+}
+
 // GetRadar returns the radar data.
 func (s *Server) GetRadar(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")

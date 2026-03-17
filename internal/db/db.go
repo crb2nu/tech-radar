@@ -132,6 +132,56 @@ func (d *DB) GetProjects() ([]types.Project, error) {
 	return projects, nil
 }
 
+// GetInsights calculates ecosystem-wide technology adoption analytics.
+func (d *DB) GetInsights() (*types.Insights, error) {
+	insights := &types.Insights{}
+
+	// Top Uncharted (used in projects but not on radar)
+	uRows, err := d.pool.Query(`
+		SELECT pt.tech_name, COUNT(DISTINCT pt.project_id) as usage_count 
+		FROM project_technologies pt 
+		LEFT JOIN entries e ON pt.tech_name = e.name 
+		WHERE e.id IS NULL 
+		GROUP BY pt.tech_name 
+		ORDER BY usage_count DESC 
+		LIMIT 10
+	`)
+	if err == nil {
+		defer uRows.Close()
+		for uRows.Next() {
+			var stat types.UsageStat
+			if err := uRows.Scan(&stat.Name, &stat.Count); err == nil {
+				insights.TopUncharted = append(insights.TopUncharted, stat)
+			}
+		}
+	}
+
+	// Top Adopted (used in projects and on radar)
+	aRows, err := d.pool.Query(`
+		SELECT pt.tech_name, COUNT(DISTINCT pt.project_id) as usage_count 
+		FROM project_technologies pt 
+		INNER JOIN entries e ON pt.tech_name = e.name 
+		GROUP BY pt.tech_name 
+		ORDER BY usage_count DESC 
+		LIMIT 10
+	`)
+	if err == nil {
+		defer aRows.Close()
+		for aRows.Next() {
+			var stat types.UsageStat
+			if err := aRows.Scan(&stat.Name, &stat.Count); err == nil {
+				insights.TopAdopted = append(insights.TopAdopted, stat)
+			}
+		}
+	}
+
+	// High level counts
+	d.pool.QueryRow("SELECT COUNT(*) FROM projects").Scan(&insights.ProjectsCount)
+	d.pool.QueryRow("SELECT COUNT(*) FROM entries").Scan(&insights.TechCount)
+
+	return insights, nil
+}
+
 // SaveScan records a project scan result.
 func (d *DB) SaveScan(result types.ScanResult) error {
 	tx, err := d.pool.Begin()
