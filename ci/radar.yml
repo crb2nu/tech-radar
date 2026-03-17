@@ -12,7 +12,7 @@
 
 variables:
   RADAR_API_URL: "http://tech-radar.tech-radar.svc.cluster.local/api/v1/ingest"
-  RADAR_IMAGE: "registry.flexinfer.ai/mcp/tech-radar:latest"
+  RADAR_IMAGE: "registry.harbor.lan/mcp/tech-radar:latest"
 
 .radar-scan:
   stage: test
