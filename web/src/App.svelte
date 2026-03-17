@@ -271,8 +271,13 @@
                     <path d="M 0 8 L 7 -6 L -7 -6 Z" fill={colors[entry.ring as keyof typeof colors]} stroke="rgba(0,0,0,0.3)" stroke-width="1" />
                   {:else}
                     <circle r="6" fill={colors[entry.ring as keyof typeof colors]} stroke="rgba(0,0,0,0.3)" stroke-width="1" />
-                  {/if}
-                  <text y="-12" text-anchor="middle" class="blip-text" class:visible={hoveredEntry === entry.name}>{entry.name}</text>
+                    {/if}
+                    {#if entry.project_ids && entry.project_ids.length > 0}
+                    <circle cx="8" cy="-8" r="5" fill="#3b82f6" stroke="white" stroke-width="1" />
+                    <text x="8" y="-6" text-anchor="middle" font-size="6" fill="white" font-weight="900">{entry.project_ids.length}</text>
+                    {/if}
+                    <text y="-18" text-anchor="middle" class="blip-text" class:visible={hoveredEntry === entry.name}>{entry.name}</text>
+
                   <title>{entry.name} ({entry.ring}): {entry.description}</title>
                 </g>
               {/each}
@@ -414,6 +419,17 @@
               </a>
             {/if}
           </section>
+
+          {#if selectedEntry.project_ids && selectedEntry.project_ids.length > 0}
+            <section class="usage-section">
+              <h3>Internal Adoption</h3>
+              <div class="project-tags-large">
+                {#each selectedEntry.project_ids as pid}
+                  <span class="project-usage-tag">{pid}</span>
+                {/each}
+              </div>
+            </section>
+          {/if}
 
           {#if selectedEntry.history && selectedEntry.history.length > 0}
             <section class="history-section">
@@ -951,6 +967,22 @@
     border-radius: 9999px;
     font-weight: 900;
     letter-spacing: 0.05em;
+  }
+
+  .project-usage-tag {
+    background: #3b82f615;
+    color: #60a5fa;
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+  }
+
+  .project-tags-large {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
   }
 
   .history-timeline {

@@ -75,6 +75,22 @@ func (d *DB) GetRadar(id string) (*types.Radar, error) {
 			hRows.Close()
 		}
 
+		// Fetch projects using this tech
+		pRows, err := d.pool.Query(`
+			SELECT p.name FROM projects p
+			JOIN project_technologies pt ON p.id = pt.project_id
+			WHERE pt.tech_name = $1
+		`, e.Name)
+		if err == nil {
+			for pRows.Next() {
+				var pName string
+				if err := pRows.Scan(&pName); err == nil {
+					e.ProjectIDs = append(e.ProjectIDs, pName)
+				}
+			}
+			pRows.Close()
+		}
+
 		radar.Entries = append(radar.Entries, e)
 	}
 
