@@ -127,22 +127,27 @@ func (d *DB) SaveScan(result types.ScanResult) error {
 
 // UpsertEntry adds or updates a radar entry and records history.
 func (d *DB) UpsertEntry(entry types.Entry) error {
+	// 1. Ensure radar exists (assume default)
+	var radarID string
+	err := d.pool.QueryRow(`
+		INSERT INTO radars (name) VALUES ('default')
+		ON CONFLICT DO NOTHING
+		RETURNING id
+	`).Scan(&radarID)
+
+	if err == sql.ErrNoRows {
+		// Already exists, fetch it
+		err = d.pool.QueryRow("SELECT id FROM radars WHERE name = 'default'").Scan(&radarID)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to ensure radar: %w", err)
+	}
+
 	tx, err := d.pool.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-
-	// 1. Ensure radar exists (assume default for now if not specified)
-	var radarID string
-	err = tx.QueryRow("SELECT id FROM radars LIMIT 1").Scan(&radarID)
-	if err != nil {
-		// Create default radar
-		err = tx.QueryRow("INSERT INTO radars (name) VALUES ('default') RETURNING id").Scan(&radarID)
-		if err != nil {
-			return err
-		}
-	}
 
 	// 2. Check if entry exists
 	var existingID string
