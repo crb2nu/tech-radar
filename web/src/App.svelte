@@ -40,6 +40,22 @@
   let hoveredEntry: string | null = $state(null);
   let selectedEntry: Entry | null = $state(null);
   let activeTab = $state('radar');
+  
+  // Management State
+  let isAdminMode = $state(false);
+  let showEntryForm = $state(false);
+  let formLoading = $state(false);
+  let formError = $state<string | null>(null);
+  let editEntryData = $state<Partial<Entry>>({
+    name: '',
+    quadrant: 'frameworks',
+    ring: 'assess',
+    description: '',
+    link: '',
+    tags: []
+  });
+  let formReason = $state('');
+  let formTagsInput = $state('');
 
   const quadrants = ['languages', 'frameworks', 'tools', 'platforms'];
   const rings = ['adopt', 'trial', 'assess', 'hold'];
@@ -158,6 +174,73 @@
     if (!dateStr) return 'Never';
     return new Date(dateStr).toLocaleDateString();
   }
+
+  // Management Functions
+  function openEntryForm(existingEntry: Entry | null = null, defaultName: string = '') {
+    if (existingEntry) {
+      editEntryData = { ...existingEntry };
+      formTagsInput = (existingEntry.tags || []).join(', ');
+    } else {
+      editEntryData = {
+        name: defaultName,
+        quadrant: 'frameworks',
+        ring: 'assess',
+        description: '',
+        link: '',
+        tags: []
+      };
+      formTagsInput = '';
+    }
+    formReason = '';
+    formError = null;
+    showEntryForm = true;
+  }
+
+  async function submitEntry() {
+    formLoading = true;
+    formError = null;
+    
+    // Process tags
+    const tags = formTagsInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
+    editEntryData.tags = tags;
+
+    // Use description as reason for history log if reason is empty
+    const submissionData = {
+      ...editEntryData,
+      description: formReason || editEntryData.description // Backend uses description field for reason when upserting history
+    };
+
+    try {
+      const response = await fetch('/api/v1/entry', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(submissionData)
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      // Reload data to reflect changes
+      const rResp = await fetch('/api/v1/radar');
+      if (rResp.ok) radar = await rResp.json();
+      
+      const iResp = await fetch('/api/v1/insights');
+      if (iResp.ok) insights = await iResp.json();
+
+      showEntryForm = false;
+      if (selectedEntry && selectedEntry.name === editEntryData.name) {
+         // Update selected entry view if it was open
+         selectedEntry = radar?.entries.find(e => e.name === editEntryData.name) || null;
+      }
+    } catch (e: any) {
+      formError = e.message;
+    } finally {
+      formLoading = false;
+    }
+  }
 </script>
 
 <main>
@@ -216,12 +299,25 @@
             </div>
           {/if}
         </div>
+
+        <div class="admin-toggle">
+          <label class="switch">
+            <input type="checkbox" bind:checked={isAdminMode}>
+            <span class="slider"></span>
+          </label>
+          <span class="label">Admin Mode</span>
+        </div>
       </nav>
 
       <div class="main-content">
         <header>
           <div class="header-top">
-            <h1>{radar.meta.name}</h1>
+            <div class="title-group">
+              <h1>{radar.meta.name}</h1>
+              {#if isAdminMode}
+                <button class="add-btn" onclick={() => openEntryForm()}>+ Add Technology</button>
+              {/if}
+            </div>
             <div class="search-container">
               <input 
                 type="text" 
@@ -384,7 +480,7 @@
                     <p class="subtitle">Widely used but not officially tracked on the Radar.</p>
                     <div class="stats-list">
                       {#each insights.top_uncharted || [] as stat}
-                        <div class="stat-row">
+                        <div class="stat-row" class:clickable={isAdminMode} onclick={() => { if(isAdminMode) openEntryForm(null, stat.name) }} role="button" tabindex={isAdminMode ? 0 : -1}>
                           <span class="t-name">{stat.name}</span>
                           <span class="t-count" title="{stat.count} projects">
                             <span class="bar" style="width: {Math.max(5, Math.min(100, (stat.count / insights.projects_count) * 100))}%"></span>
@@ -464,7 +560,12 @@
         
         <div class="modal-header">
           <div class="title-line">
-            <h2>{selectedEntry.name}</h2>
+            <div class="title-with-actions">
+              <h2>{selectedEntry.name}</h2>
+              {#if isAdminMode}
+                <button class="edit-btn" onclick={() => openEntryForm(selectedEntry)}>✏️ Edit</button>
+              {/if}
+            </div>
             <span class="ring-label" style="--ring-color: {colors[selectedEntry.ring as keyof typeof colors]}">
               {selectedEntry.ring.toUpperCase()}
             </span>
@@ -520,6 +621,82 @@
             </div>
           {/if}
         </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showEntryForm}
+    <div class="modal-overlay" transition:fade onclick={() => showEntryForm = false}>
+      <div class="modal form-modal" transition:fly={{ y: 20 }} onclick={e => e.stopPropagation()}>
+        <button class="close" onclick={() => showEntryForm = false}>&times;</button>
+        
+        <div class="modal-header">
+          <h2>{editEntryData.id ? 'Edit' : 'Add'} Technology</h2>
+          <p class="subtitle">Update the ecosystem registry.</p>
+        </div>
+
+        <form class="entry-form" onsubmit={(e) => { e.preventDefault(); submitEntry(); }}>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="tech-name">Name</label>
+              <input type="text" id="tech-name" bind:value={editEntryData.name} required placeholder="e.g. React" disabled={!!editEntryData.id} />
+              {#if editEntryData.id}
+                <small class="help-text">Technology names cannot be changed once created.</small>
+              {/if}
+            </div>
+          </div>
+
+          <div class="form-row split">
+            <div class="form-group">
+              <label for="tech-quadrant">Quadrant</label>
+              <select id="tech-quadrant" bind:value={editEntryData.quadrant}>
+                {#each quadrants as q}
+                  <option value={q}>{q.toUpperCase()}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="tech-ring">Adoption Ring</label>
+              <select id="tech-ring" bind:value={editEntryData.ring}>
+                {#each rings as r}
+                  <option value={r}>{r.toUpperCase()}</option>
+                {/each}
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="tech-desc">Assessment / Description</label>
+            <textarea id="tech-desc" bind:value={editEntryData.description} required rows="4" placeholder="Why are we adopting or holding this technology?"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="tech-reason">Decision Rationale (Optional log entry)</label>
+            <input type="text" id="tech-reason" bind:value={formReason} placeholder="e.g. Approved by Architecture Board on 3/17" />
+          </div>
+
+          <div class="form-row split">
+            <div class="form-group">
+              <label for="tech-tags">Tags (comma separated)</label>
+              <input type="text" id="tech-tags" bind:value={formTagsInput} placeholder="frontend, ui, library" />
+            </div>
+            <div class="form-group">
+              <label for="tech-link">Documentation Link</label>
+              <input type="url" id="tech-link" bind:value={editEntryData.link} placeholder="https://..." />
+            </div>
+          </div>
+
+          {#if formError}
+            <div class="form-error">{formError}</div>
+          {/if}
+
+          <div class="form-actions">
+            <button type="button" class="btn-cancel" onclick={() => showEntryForm = false}>Cancel</button>
+            <button type="submit" class="btn-submit" disabled={formLoading}>
+              {formLoading ? 'Saving...' : 'Save Technology'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   {/if}
@@ -1305,5 +1482,232 @@
   .empty {
     color: #64748b;
     font-style: italic;
+  }
+
+  /* Admin Tools */
+  .admin-toggle {
+    margin-top: auto;
+    padding-top: 2rem;
+    border-top: 1px solid #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .admin-toggle .label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #94a3b8;
+  }
+
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+  }
+
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #334155;
+    transition: .3s;
+    border-radius: 24px;
+  }
+
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+  }
+
+  input:checked + .slider {
+    background-color: #3b82f6;
+  }
+
+  input:checked + .slider:before {
+    transform: translateX(20px);
+  }
+
+  .title-group {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .add-btn {
+    background: #10b981;
+    color: white;
+    border: none;
+    padding: 0.6rem 1.25rem;
+    border-radius: 10px;
+    font-weight: 800;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .add-btn:hover {
+    background: #059669;
+    transform: translateY(-2px);
+  }
+
+  .title-with-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .edit-btn {
+    background: #334155;
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .edit-btn:hover {
+    background: #475569;
+  }
+
+  .clickable {
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 8px;
+    transition: background 0.2s;
+  }
+
+  .clickable:hover {
+    background: #1e293b;
+  }
+
+  /* Forms */
+  .form-modal {
+    width: 600px;
+  }
+
+  .form-modal .subtitle {
+    color: #94a3b8;
+    margin-top: 0.5rem;
+  }
+
+  .entry-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .form-row {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .form-row.split .form-group {
+    flex: 1;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .form-group label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #cbd5e1;
+  }
+
+  .form-group input, .form-group textarea, .form-group select {
+    background: #0f172a;
+    border: 1px solid #334155;
+    padding: 0.8rem 1rem;
+    border-radius: 10px;
+    color: white;
+    font-family: inherit;
+    font-size: 0.9rem;
+    outline: none;
+  }
+
+  .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+    border-color: #3b82f6;
+  }
+
+  .form-group input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .help-text {
+    font-size: 0.7rem;
+    color: #64748b;
+  }
+
+  .form-error {
+    background: #ef444420;
+    color: #ef4444;
+    padding: 1rem;
+    border-radius: 10px;
+    border: 1px solid #ef444440;
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .btn-cancel {
+    background: transparent;
+    color: #94a3b8;
+    border: 1px solid #334155;
+    padding: 0.8rem 1.5rem;
+    border-radius: 10px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .btn-submit {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 0.8rem 2rem;
+    border-radius: 10px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-submit:not(:disabled):hover {
+    background: #2563eb;
+    transform: translateY(-2px);
   }
 </style>
