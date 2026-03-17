@@ -255,20 +255,31 @@ func (d *DB) UpsertEntry(entry types.Entry) error {
 	var existingRing string
 	err = tx.QueryRow("SELECT id, ring FROM entries WHERE name = $1 AND radar_id = $2", entry.Name, radarID).Scan(&existingID, &existingRing)
 
+	// Calculate movement vector
+	movement := 0
+	if existingRing != "" && existingRing != string(entry.Ring) {
+		rings := map[string]int{"adopt": 4, "trial": 3, "assess": 2, "hold": 1}
+		if rings[string(entry.Ring)] > rings[existingRing] {
+			movement = 1 // Promotion
+		} else {
+			movement = -1 // Demotion
+		}
+	}
+
 	if err == sql.ErrNoRows {
 		// Insert new entry
 		err = tx.QueryRow(`
 			INSERT INTO entries (radar_id, name, quadrant, ring, description, moved, link, tags)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			RETURNING id
-		`, radarID, entry.Name, entry.Quadrant, entry.Ring, entry.Description, entry.Moved, entry.Link, pq.StringArray(entry.Tags)).Scan(&existingID)
+		`, radarID, entry.Name, entry.Quadrant, entry.Ring, entry.Description, movement, entry.Link, pq.StringArray(entry.Tags)).Scan(&existingID)
 	} else if err == nil {
 		// Update existing entry
 		_, err = tx.Exec(`
 			UPDATE entries SET 
 				quadrant = $1, ring = $2, description = $3, moved = $4, link = $5, tags = $6, updated_at = CURRENT_TIMESTAMP
 			WHERE id = $7
-		`, entry.Quadrant, entry.Ring, entry.Description, entry.Moved, entry.Link, pq.StringArray(entry.Tags), existingID)
+		`, entry.Quadrant, entry.Ring, entry.Description, movement, entry.Link, pq.StringArray(entry.Tags), existingID)
 	}
 
 	if err != nil {
