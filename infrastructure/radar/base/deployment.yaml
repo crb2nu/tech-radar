@@ -19,14 +19,14 @@ spec:
     spec:
       initContainers:
         - name: init-radar
-          image: registry.flexinfer.ai/mcp/tech-radar:latest
+          image: registry.harbor.lan/mcp/tech-radar:latest
           command: ["sh", "-c", "if [ ! -f /data/radar.yaml ]; then ./radar init --data-dir /data; fi"]
           volumeMounts:
             - name: data
               mountPath: /data
       containers:
         - name: tech-radar
-          image: registry.flexinfer.ai/mcp/tech-radar:latest
+          image: registry.harbor.lan/mcp/tech-radar:latest
           imagePullPolicy: Always
           env:
             - name: DATABASE_URL

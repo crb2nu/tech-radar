@@ -44,10 +44,10 @@
   const rings = ['adopt', 'trial', 'assess', 'hold'];
 
   const colors = {
-    adopt: '#93c47d',
-    trial: '#93d2c2',
-    assess: '#fbdb84',
-    hold: '#efafa9'
+    adopt: '#10b981', // Emerald 500
+    trial: '#3b82f6', // Blue 500
+    assess: '#f59e0b', // Amber 500
+    hold: '#ef4444'   // Red 500
   };
 
   const ringRadius = [70, 140, 210, 280]; // Radii for the 4 rings
@@ -146,200 +146,245 @@
   }
 
   function formatDate(dateStr: string) {
+    if (!dateStr) return 'Never';
     return new Date(dateStr).toLocaleDateString();
   }
 </script>
 
 <main>
   {#if error}
-    <p class="error">{error}</p>
+    <div class="error-container" in:fade>
+      <div class="error-icon">⚠️</div>
+      <p class="error">{error}</p>
+      <button onclick={() => window.location.reload()}>Retry Connection</button>
+    </div>
   {:else if !radar}
     <div class="loading-state">
       <div class="spinner"></div>
-      <p>Loading Tech Radar...</p>
+      <p>Loading Technology Ecosystem...</p>
     </div>
   {:else}
     <header>
-      <h1>{radar.meta.name}</h1>
-      
-      <div class="tabs">
-        <button class:active={activeTab === 'radar'} onclick={() => activeTab = 'radar'}>Technology Radar</button>
-        <button class:active={activeTab === 'projects'} onclick={() => activeTab = 'projects'}>Project Catalog</button>
+      <div class="header-content">
+        <h1>{radar.meta.name}</h1>
+        <div class="tabs">
+          <button class:active={activeTab === 'radar'} onclick={() => activeTab = 'radar'}>
+            <span class="icon">🎯</span> Technology Radar
+          </button>
+          <button class:active={activeTab === 'projects'} onclick={() => activeTab = 'projects'}>
+            <span class="icon">📦</span> Project Catalog
+          </button>
+        </div>
       </div>
 
-      <div class="controls">
-        <input 
-          type="text" 
-          placeholder="Search {activeTab === 'radar' ? 'technologies' : 'projects'}..." 
-          bind:value={searchQuery}
-          oninput={handleSearch}
-          class="search-input"
-        />
-        
-        {#if activeTab === 'radar'}
-          <div class="filter-group">
-            <label for="quadrant-filter">Quadrant:</label>
-            <select id="quadrant-filter" bind:value={selectedQuadrant}>
-              <option value="all">All Quadrants</option>
-              {#each quadrants as q}
-                <option value={q}>{q.toUpperCase()}</option>
-              {/each}
-            </select>
+      <div class="controls-wrapper">
+        <div class="controls">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input 
+              type="text" 
+              placeholder="Search {activeTab === 'radar' ? 'technologies' : 'projects'}..." 
+              bind:value={searchQuery}
+              oninput={handleSearch}
+              class="search-input"
+            />
           </div>
+          
+          {#if activeTab === 'radar'}
+            <div class="filters">
+              <div class="filter-group">
+                <label for="quadrant-filter">Quadrant</label>
+                <select id="quadrant-filter" bind:value={selectedQuadrant}>
+                  <option value="all">All Sections</option>
+                  {#each quadrants as q}
+                    <option value={q}>{q.toUpperCase()}</option>
+                  {/each}
+                </select>
+              </div>
 
-          <div class="filter-group">
-            <label for="ring-filter">Ring:</label>
-            <select id="ring-filter" bind:value={selectedRing}>
-              <option value="all">All Rings</option>
-              {#each rings as r}
-                <option value={r}>{r.toUpperCase()}</option>
-              {/each}
-            </select>
-          </div>
+              <div class="filter-group">
+                <label for="ring-filter">Ring</label>
+                <select id="ring-filter" bind:value={selectedRing}>
+                  <option value="all">All Rings</option>
+                  {#each rings as r}
+                    <option value={r}>{r.toUpperCase()}</option>
+                  {/each}
+                </select>
+              </div>
 
-          {#if allTags.length > 0}
-            <div class="filter-group">
-              <label for="tag-filter">Tag:</label>
-              <select id="tag-filter" bind:value={selectedTag}>
-                <option value="all">All Tags</option>
-                {#each allTags as t}
-                  <option value={t}>{t}</option>
-                {/each}
-              </select>
+              {#if allTags.length > 0}
+                <div class="filter-group">
+                  <label for="tag-filter">Tag</label>
+                  <select id="tag-filter" bind:value={selectedTag}>
+                    <option value="all">All Tags</option>
+                    {#each allTags as t}
+                      <option value={t}>{t}</option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
             </div>
           {/if}
-        {/if}
+        </div>
       </div>
     </header>
 
-    {#if activeTab === 'radar'}
-      <div class="radar-view" in:fade>
-        <div class="radar-container">
-          <svg viewBox="0 0 600 600" width="600" height="600">
-            <!-- Rings -->
-            {#each rings.slice().reverse() as ring, i}
-              {@const r = ringRadius[3 - i]}
-              <circle cx="300" cy="300" r={r} fill={colors[ring as keyof typeof colors]} fill-opacity="0.1" class="radar-ring" stroke-width="2" />
-            {/each}
-            
-            <!-- Quadrant dividers -->
-            <line x1="300" y1="20" x2="300" y2="580" class="radar-divider" stroke-width="2" />
-            <line x1="20" y1="300" x2="580" y2="300" class="radar-divider" stroke-width="2" />
+    <div class="content-area">
+      {#if activeTab === 'radar'}
+        <div class="radar-view" in:fade>
+          <div class="radar-container">
+            <svg viewBox="0 0 600 600" width="600" height="600">
+              <!-- Rings -->
+              {#each rings.slice().reverse() as ring, i}
+                {@const r = ringRadius[3 - i]}
+                <circle cx="300" cy="300" r={r} fill={colors[ring as keyof typeof colors]} fill-opacity="0.05" class="radar-ring" stroke-width="1" />
+              {/each}
+              
+              <!-- Quadrant dividers -->
+              <line x1="300" y1="20" x2="300" y2="580" class="radar-divider" stroke-width="1" stroke-dasharray="4 4" />
+              <line x1="20" y1="300" x2="580" y2="300" class="radar-divider" stroke-width="1" stroke-dasharray="4 4" />
 
-            <!-- Quadrant Labels -->
-            <text x="50" y="50" class="quad-label">LANGUAGES</text>
-            <text x="550" y="50" text-anchor="end" class="quad-label">FRAMEWORKS</text>
-            <text x="50" y="550" class="quad-label">TOOLS</text>
-            <text x="550" y="550" text-anchor="end" class="quad-label">PLATFORMS</text>
+              <!-- Quadrant Labels -->
+              <text x="40" y="40" class="quad-label">LANGUAGES</text>
+              <text x="560" y="40" text-anchor="end" class="quad-label">FRAMEWORKS</text>
+              <text x="40" y="560" class="quad-label">TOOLS</text>
+              <text x="560" y="560" text-anchor="end" class="quad-label">PLATFORMS</text>
 
-            <!-- Blips -->
-            {#each filteredEntries as entry, i}
-              {@const pos = getBlipPosition(entry, i)}
-              <g 
-                class="blip" 
-                class:hovered={hoveredEntry === entry.name}
-                transform="translate({pos.x}, {pos.y})"
-                onmouseenter={() => hoveredEntry = entry.name}
-                onmouseleave={() => hoveredEntry = null}
-                onclick={() => selectedEntry = entry}
-                role="button"
-                tabindex="0"
-                aria-label={entry.name}
-              >
-                {#if entry.moved === 1}
-                  <path d="M 0 -8 L 7 6 L -7 6 Z" fill={colors[entry.ring as keyof typeof colors]} stroke="#333" stroke-width="1" />
-                {:else if entry.moved === -1}
-                  <path d="M 0 8 L 7 -6 L -7 -6 Z" fill={colors[entry.ring as keyof typeof colors]} stroke="#333" stroke-width="1" />
-                {:else}
-                  <circle r="6" fill={colors[entry.ring as keyof typeof colors]} stroke="#333" stroke-width="1" />
-                {/if}
-                <text y="-12" text-anchor="middle" class="blip-text" class:visible={hoveredEntry === entry.name}>{entry.name}</text>
-                <title>{entry.name} ({entry.ring}): {entry.description}</title>
-              </g>
-            {/each}
-          </svg>
-        </div>
-
-        {#if filteredEntries.length === 0}
-          <div class="empty-state">
-            <p>No technologies match your filters.</p>
-            <button onclick={() => { searchQuery = ''; selectedQuadrant = 'all'; selectedRing = 'all'; selectedTag = 'all'; }}>Reset Filters</button>
+              <!-- Blips -->
+              {#each filteredEntries as entry, i}
+                {@const pos = getBlipPosition(entry, i)}
+                <g 
+                  class="blip" 
+                  class:hovered={hoveredEntry === entry.name}
+                  transform="translate({pos.x}, {pos.y})"
+                  onmouseenter={() => hoveredEntry = entry.name}
+                  onmouseleave={() => hoveredEntry = null}
+                  onclick={() => selectedEntry = entry}
+                  onkeydown={(e) => e.key === 'Enter' && (selectedEntry = entry)}
+                  role="button"
+                  tabindex="0"
+                  aria-label={entry.name}
+                >
+                  {#if entry.moved === 1}
+                    <path d="M 0 -8 L 7 6 L -7 6 Z" fill={colors[entry.ring as keyof typeof colors]} stroke="rgba(0,0,0,0.3)" stroke-width="1" />
+                  {:else if entry.moved === -1}
+                    <path d="M 0 8 L 7 -6 L -7 -6 Z" fill={colors[entry.ring as keyof typeof colors]} stroke="rgba(0,0,0,0.3)" stroke-width="1" />
+                  {:else}
+                    <circle r="6" fill={colors[entry.ring as keyof typeof colors]} stroke="rgba(0,0,0,0.3)" stroke-width="1" />
+                  {/if}
+                  <text y="-12" text-anchor="middle" class="blip-text" class:visible={hoveredEntry === entry.name}>{entry.name}</text>
+                  <title>{entry.name} ({entry.ring}): {entry.description}</title>
+                </g>
+              {/each}
+            </svg>
           </div>
-        {/if}
 
-        <div class="entries-list">
-          {#each rings as ring}
-            {@const entries = getEntriesByRing(ring)}
-            {#if entries.length > 0}
-              <section>
-                <h2 style="color: {colors[ring as keyof typeof colors]}">{ring.toUpperCase()}</h2>
-                <div class="entries-group" role="list">
-                  {#each entries as entry}
-                    <div 
-                      class="entry-item"
-                      class:active={hoveredEntry === entry.name}
-                      onmouseenter={() => hoveredEntry = entry.name}
-                      onmouseleave={() => hoveredEntry = null}
-                      onclick={() => selectedEntry = entry}
-                      onkeydown={(e) => e.key === 'Enter' && (selectedEntry = entry)}
-                      role="listitem"
-                      tabindex="0"
-                    >
-                      <div class="entry-header">
-                        <strong>{entry.name}</strong>
-                        <div>
+          {#if filteredEntries.length === 0}
+            <div class="empty-state">
+              <div class="empty-icon">🔭</div>
+              <p>No technologies match your current filters.</p>
+              <button onclick={() => { searchQuery = ''; selectedQuadrant = 'all'; selectedRing = 'all'; selectedTag = 'all'; }}>Clear All Filters</button>
+            </div>
+          {/if}
+
+          <div class="entries-list">
+            {#each rings as ring}
+              {@const entries = getEntriesByRing(ring)}
+              {#if entries.length > 0}
+                <section class="ring-section">
+                  <div class="ring-header">
+                    <span class="ring-dot" style="background: {colors[ring as keyof typeof colors]}"></span>
+                    <h2 style="color: {colors[ring as keyof typeof colors]}">{ring.toUpperCase()}</h2>
+                    <span class="count-badge">{entries.length}</span>
+                  </div>
+                  <div class="entries-grid">
+                    {#each entries as entry}
+                      <div 
+                        class="entry-item"
+                        class:active={hoveredEntry === entry.name}
+                        onmouseenter={() => hoveredEntry = entry.name}
+                        onmouseleave={() => hoveredEntry = null}
+                        onclick={() => selectedEntry = entry}
+                        onkeydown={(e) => e.key === 'Enter' && (selectedEntry = entry)}
+                        role="listitem"
+                        tabindex="0"
+                      >
+                        <div class="entry-header">
+                          <strong>{entry.name}</strong>
                           {#if entry.project_ids && entry.project_ids.length > 0}
-                            <span class="usage-tag">Used by {entry.project_ids.length}</span>
+                            <span class="usage-count">Used by {entry.project_ids.length}</span>
                           {/if}
-                          {#each entry.tags || [] as tag}
-                            <span class="tag">{tag}</span>
+                        </div>
+                        <p class="description">{entry.description}</p>
+                        <div class="entry-footer">
+                          <span class="quadrant-badge">{entry.quadrant}</span>
+                          {#each (entry.tags || []).slice(0, 2) as tag}
+                            <span class="tag-badge">{tag}</span>
                           {/each}
-                          <span class="quadrant-tag">{entry.quadrant}</span>
                         </div>
                       </div>
-                      <p class="description">{entry.description}</p>
-                    </div>
-                  {/each}
-                </div>
-              </section>
-            {/if}
-          {/each}
-        </div>
-      </div>
-    {:else}
-      <div class="projects-view" in:fade>
-        {#if filteredProjects.length === 0}
-          <div class="empty-state">
-            <p>No projects found matching your search.</p>
-          </div>
-        {:else}
-          <div class="project-grid">
-            {#each filteredProjects as project}
-              <div class="project-card">
-                <div class="project-header">
-                  <h3>{project.name}</h3>
-                  <span class="scan-date">Last Scanned: {formatDate(project.last_scan)}</span>
-                </div>
-                {#if project.url}
-                  <a href={project.url} class="project-url" target="_blank">{project.url}</a>
-                {/if}
-                <div class="project-techs">
-                  {#each project.technologies || [] as tech}
-                    <span class="tech-tag" title="Source: {tech.source}">
-                      {tech.name} <small>{tech.version}</small>
-                    </span>
-                  {/each}
-                </div>
-              </div>
+                    {/each}
+                  </div>
+                </section>
+              {/if}
             {/each}
           </div>
-        {/if}
-      </div>
-    {/if}
+        </div>
+      {:else}
+        <div class="projects-view" in:fade>
+          {#if filteredProjects.length === 0}
+            <div class="empty-state">
+              <div class="empty-icon">📁</div>
+              <p>No projects found matching your search.</p>
+            </div>
+          {:else}
+            <div class="project-grid">
+              {#each filteredProjects as project}
+                <div class="project-card">
+                  <div class="project-card-header">
+                    <div class="project-info">
+                      <h3>{project.name}</h3>
+                      {#if project.url}
+                        <a href={project.url} class="project-link" target="_blank">View Repository ↗</a>
+                      {/if}
+                    </div>
+                    <div class="scan-meta">
+                      <span class="scan-label">LAST SCAN</span>
+                      <span class="scan-value">{formatDate(project.last_scan)}</span>
+                    </div>
+                  </div>
+                  
+                  <div class="project-stats">
+                    <div class="stat">
+                      <span class="stat-value">{project.technologies?.length || 0}</span>
+                      <span class="stat-label">Dependencies</span>
+                    </div>
+                  </div>
+
+                  <div class="project-tech-cloud">
+                    {#if project.technologies && project.technologies.length > 0}
+                      {#each project.technologies as tech}
+                        <div class="tech-item" title="Source: {tech.source}">
+                          <span class="tech-name">{tech.name}</span>
+                          {#if tech.version}
+                            <span class="tech-version">{tech.version}</span>
+                          {/if}
+                        </div>
+                      {/each}
+                    {:else}
+                      <p class="no-techs">No technologies discovered yet.</p>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
   {/if}
 
   {#if selectedEntry}
-    <!-- ... same modal as before ... -->
     <div class="modal-backdrop" transition:fade onclick={() => selectedEntry = null}>
       <div class="modal-content" transition:fly={{ y: 20, duration: 300 }} onclick={(event) => event.stopPropagation()}>
         <button class="close-btn" onclick={() => selectedEntry = null}>&times;</button>
@@ -347,44 +392,44 @@
         <header class="modal-header">
           <div class="modal-title-row">
             <h1>{selectedEntry.name}</h1>
-            <span class="ring-tag-large" style="background: {colors[selectedEntry.ring as keyof typeof colors]}20; color: {colors[selectedEntry.ring as keyof typeof colors]}">
+            <span class="ring-badge-large" style="background: {colors[selectedEntry.ring as keyof typeof colors]}20; color: {colors[selectedEntry.ring as keyof typeof colors]}">
               {selectedEntry.ring.toUpperCase()}
             </span>
           </div>
           <div class="modal-meta">
-            <span class="quadrant-tag">{selectedEntry.quadrant}</span>
+            <span class="quadrant-badge">{selectedEntry.quadrant}</span>
             {#each selectedEntry.tags || [] as tag}
-              <span class="tag">{tag}</span>
+              <span class="tag-badge">{tag}</span>
             {/each}
           </div>
         </header>
 
         <div class="modal-body">
           <section class="description-section">
-            <h3>About</h3>
+            <h3>Assessment</h3>
             <p>{selectedEntry.description}</p>
             {#if selectedEntry.link}
-              <a href={selectedEntry.link} target="_blank" rel="noopener noreferrer" class="external-link">
-                Learn more ↗
+              <a href={selectedEntry.link} target="_blank" rel="noopener noreferrer" class="external-link-btn">
+                Technical Documentation ↗
               </a>
             {/if}
           </section>
 
           {#if selectedEntry.history && selectedEntry.history.length > 0}
             <section class="history-section">
-              <h3>History</h3>
+              <h3>Governance History</h3>
               <div class="history-timeline">
                 {#each selectedEntry.history.slice().reverse() as h}
-                  <div class="history-card">
-                    <div class="history-header">
+                  <div class="history-card" style="border-left-color: {colors[h.ring as keyof typeof colors]}">
+                    <div class="history-card-header">
                       <span class="history-date">{formatDate(h.date)}</span>
-                      <span class="ring-tag-small" style="background: {colors[h.ring as keyof typeof colors]}15; color: {colors[h.ring as keyof typeof colors]}">
-                        {h.ring}
+                      <span class="ring-status" style="color: {colors[h.ring as keyof typeof colors]}">
+                        {h.ring.toUpperCase()}
                       </span>
-                      {#if h.author}
-                        <span class="author">by {h.author}</span>
-                      {/if}
                     </div>
+                    {#if h.author}
+                      <div class="history-author">Decided by <strong>{h.author}</strong></div>
+                    {/if}
                     {#if h.reason}
                       <p class="history-reason">{h.reason}</p>
                     {/if}
@@ -400,123 +445,153 @@
 </main>
 
 <style>
-  :root {
-    --bg-primary: #f8fafc;
-    --bg-secondary: #ffffff;
-    --bg-card: #ffffff;
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-muted: #94a3b8;
-    --border-color: #e2e8f0;
-    --accent-color: #3b82f6;
-    --radar-grid: #e2e8f0;
-    --radar-label: #64748b;
-    --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg-primary: #0f172a;
-      --bg-secondary: #1e293b;
-      --bg-card: #1e293b;
-      --text-primary: #f1f5f9;
-      --text-secondary: #cbd5e1;
-      --text-muted: #64748b;
-      --border-color: #334155;
-      --radar-grid: #334155;
-      --radar-label: #94a3b8;
-    }
-  }
-
-  main {
-    font-family: 'Inter', system-ui, sans-serif;
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 3rem 2rem;
-    color: var(--text-primary);
-    background-color: var(--bg-primary);
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    background-color: #0f172a;
     min-height: 100vh;
   }
 
+  :root {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-card: #1e293b;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-muted: #64748b;
+    --border-color: #334155;
+    --accent-color: #3b82f6;
+    --radar-grid: #334155;
+    --radar-label: #94a3b8;
+    --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+  }
+
+  main {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--text-primary);
+    background-color: var(--bg-primary);
+    min-height: 100vh;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
   header {
+    background: #0b1120;
+    padding: 4rem 2rem 2rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .header-content {
+    max-width: 1200px;
+    margin: 0 auto;
     text-align: center;
-    margin-bottom: 4rem;
   }
 
   h1 {
-    font-size: 3.5rem;
+    font-size: 4rem;
     font-weight: 900;
-    letter-spacing: -0.05em;
-    margin-bottom: 2rem;
-    background: linear-gradient(to bottom right, var(--text-primary), var(--accent-color));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.06em;
+    margin-bottom: 2.5rem;
+    color: white;
   }
 
   .tabs {
     display: flex;
-    gap: 1rem;
+    gap: 0.5rem;
     justify-content: center;
-    margin-bottom: 2.5rem;
+    background: rgba(255,255,255,0.05);
+    padding: 0.4rem;
+    border-radius: 9999px;
+    width: fit-content;
+    margin: 0 auto 3rem;
+    border: 1px solid rgba(255,255,255,0.1);
   }
 
   .tabs button {
-    padding: 0.75rem 2rem;
+    padding: 0.8rem 2rem;
     border-radius: 9999px;
-    border: 2px solid var(--border-color);
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   .tabs button.active {
     background: var(--accent-color);
     color: white;
-    border-color: var(--accent-color);
-    box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.39);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  }
+
+  .controls-wrapper {
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
   }
 
   .controls {
     display: flex;
-    gap: 1.5rem;
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 2rem;
     background: var(--bg-secondary);
-    padding: 1.5rem;
-    border-radius: 20px;
-    box-shadow: var(--shadow-sm);
+    padding: 2rem;
+    border-radius: 24px;
     border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+  }
+
+  .search-box {
+    position: relative;
+    width: 100%;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 1.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
   }
 
   .search-input {
-    padding: 0.75rem 1.5rem;
+    width: 100%;
+    padding: 1rem 1rem 1rem 3.5rem;
+    background: #0f172a;
     border: 2px solid var(--border-color);
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    border-radius: 12px;
-    min-width: 350px;
-    font-size: 1rem;
+    border-radius: 16px;
+    color: white;
+    font-size: 1.1rem;
     outline: none;
     transition: all 0.2s;
+    box-sizing: border-box;
   }
 
   .search-input:focus {
     border-color: var(--accent-color);
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+    background: #1e293b;
+  }
+
+  .filters {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
   }
 
   .filter-group {
     display: flex;
-    align-items: center;
-    gap: 0.75rem;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 200px;
   }
 
   .filter-group label {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 800;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -524,143 +599,285 @@
   }
 
   select {
-    padding: 0.6rem 2.5rem 0.6rem 1rem;
-    border: 2px solid var(--border-color);
-    border-radius: 10px;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-    font-size: 0.875rem;
+    padding: 0.8rem 1rem;
+    background: #0f172a;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    color: white;
     font-weight: 600;
     cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.75rem center;
-    background-size: 1rem;
+  }
+
+  .content-area {
+    flex: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 4rem 2rem;
   }
 
   .radar-container {
     display: flex;
     justify-content: center;
-    margin-bottom: 5rem;
-    background: var(--bg-secondary);
-    border-radius: 40px;
+    margin-bottom: 6rem;
+    background: #0b1120;
     padding: 4rem;
-    box-shadow: var(--shadow-sm);
+    border-radius: 48px;
     border: 1px solid var(--border-color);
   }
 
-  .blip circle, .blip path {
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  .blip.hovered circle, .blip.hovered path {
-    stroke: var(--text-primary);
-    stroke-width: 2.5;
-    filter: drop-shadow(0 0 8px rgba(0,0,0,0.2));
+  .quad-label {
+    font-size: 12px;
+    fill: var(--radar-label);
+    font-weight: 900;
+    letter-spacing: 0.2em;
   }
 
   .blip-text {
-    font-size: 11px;
-    fill: var(--text-primary);
+    font-size: 10px;
+    fill: white;
     font-weight: 800;
-    pointer-events: none;
     opacity: 0;
-    transition: opacity 0.2s, transform 0.2s;
-    transform: translateY(4px);
+    pointer-events: none;
   }
 
   .blip-text.visible {
     opacity: 1;
-    transform: translateY(0);
   }
 
-  .project-grid {
+  .entries-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5rem;
+  }
+
+  .ring-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+  }
+
+  .ring-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+
+  .ring-header h2 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+  }
+
+  .count-badge {
+    background: rgba(255,255,255,0.1);
+    padding: 0.2rem 0.8rem;
+    border-radius: 9999px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+
+  .entries-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-    gap: 2rem;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
   }
 
-  .project-card {
-    background: var(--bg-card);
+  .entry-item {
+    background: var(--bg-secondary);
+    padding: 1.5rem;
     border-radius: 20px;
-    padding: 2rem;
     border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
-    transition: all 0.3s;
+    cursor: pointer;
+    transition: all 0.2s;
   }
 
-  .project-card:hover {
-    transform: translateY(-5px);
-    box-shadow: var(--shadow);
+  .entry-item:hover, .entry-item.active {
     border-color: var(--accent-color);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow);
   }
 
-  .project-header {
+  .entry-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 1rem;
   }
 
-  .project-header h3 {
-    margin: 0;
-    font-size: 1.5rem;
+  .entry-item strong {
+    font-size: 1.2rem;
     font-weight: 800;
-    color: var(--text-primary);
   }
 
-  .scan-date {
-    font-size: 0.75rem;
+  .usage-count {
+    font-size: 0.7rem;
+    font-weight: 800;
+    background: #3b82f620;
+    color: #60a5fa;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+  }
+
+  .description {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .entry-footer {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .quadrant-badge {
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--accent-color);
+    background: #3b82f615;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+  }
+
+  .tag-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
     color: var(--text-muted);
-    font-weight: 600;
+    border: 1px solid var(--border-color);
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
   }
 
-  .project-techs {
+  .project-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+    gap: 2rem;
+  }
+
+  .project-card {
+    background: var(--bg-secondary);
+    border-radius: 24px;
+    padding: 2.5rem;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+  }
+
+  .project-card-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+  }
+
+  .project-card h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.75rem;
+    font-weight: 900;
+  }
+
+  .project-link {
+    color: var(--accent-color);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .scan-meta {
+    text-align: right;
+  }
+
+  .scan-label {
+    display: block;
+    font-size: 0.6rem;
+    font-weight: 900;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+  }
+
+  .scan-value {
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .project-stats {
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: #0f172a;
+    border-radius: 12px;
+    width: fit-content;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: var(--accent-color);
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+
+  .project-tech-cloud {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 1.5rem;
+    gap: 0.6rem;
   }
 
-  .tech-tag {
-    background: var(--bg-primary);
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-size: 0.8rem;
-    font-weight: 600;
+  .tech-item {
+    background: #0f172a;
     border: 1px solid var(--border-color);
-    color: var(--text-secondary);
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
   }
 
-  .tech-tag small {
+  .tech-name {
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .tech-version {
+    font-size: 0.7rem;
     color: var(--text-muted);
-    margin-left: 4px;
+    font-family: monospace;
+  }
+
+  .no-techs {
+    color: var(--text-muted);
+    font-style: italic;
   }
 
   .empty-state {
     text-align: center;
-    padding: 5rem;
+    padding: 8rem 2rem;
     background: var(--bg-secondary);
-    border-radius: 24px;
+    border-radius: 32px;
     border: 2px dashed var(--border-color);
   }
 
-  .empty-state p {
-    color: var(--text-muted);
-    font-size: 1.25rem;
+  .empty-icon {
+    font-size: 4rem;
     margin-bottom: 1.5rem;
-  }
-
-  .empty-state button {
-    padding: 0.5rem 1.5rem;
-    background: var(--accent-color);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-weight: 700;
-    cursor: pointer;
   }
 
   .loading-state {
@@ -668,17 +885,17 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 60vh;
+    height: 60vh;
   }
 
   .spinner {
-    width: 50px;
-    height: 50px;
-    border: 5px solid var(--border-color);
+    width: 60px;
+    height: 60px;
+    border: 6px solid rgba(255,255,255,0.1);
     border-top-color: var(--accent-color);
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
   }
 
   @keyframes spin {
@@ -689,136 +906,92 @@
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(15, 23, 42, 0.8);
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(12px);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
-    backdrop-filter: blur(8px);
-    padding: 2rem;
+    z-index: 2000;
   }
 
   .modal-content {
-    background: var(--bg-card);
-    width: 100%;
-    max-width: 850px;
-    max-height: 90vh;
+    background: #1e293b;
+    width: 90%;
+    max-width: 900px;
+    max-height: 85vh;
     border-radius: 32px;
-    position: relative;
     padding: 4rem;
+    position: relative;
     overflow-y: auto;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     border: 1px solid var(--border-color);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   }
 
   .close-btn {
     position: absolute;
     top: 2rem;
     right: 2rem;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: #0f172a;
+    color: white;
     font-size: 1.5rem;
-    color: var(--text-muted);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
   }
 
-  .close-btn:hover {
-    background: #fee2e2;
-    color: #ef4444;
-    border-color: #fecaca;
-  }
-
-  .usage-tag {
-    background: #dbeafe;
-    color: #1e40af;
-    padding: 4px 12px;
+  .ring-badge-large {
+    padding: 0.5rem 1.5rem;
     border-radius: 9999px;
-    font-size: 0.7rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    margin-right: 0.5rem;
+    font-weight: 900;
+    letter-spacing: 0.05em;
   }
 
-  .tag {
-    background: var(--bg-primary);
-    padding: 4px 12px;
-    border-radius: 8px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: var(--text-secondary);
-    border: 1px solid var(--border-color);
-    margin-right: 0.5rem;
-  }
-
-  .quadrant-tag {
-    background: var(--bg-primary);
-    padding: 4px 12px;
-    border-radius: 9999px;
-    font-size: 0.7rem;
-    font-weight: 800;
-    color: var(--accent-color);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    text-transform: uppercase;
-  }
-
-  .entries-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: 3rem;
-  }
-
-  .entry-item {
-    background: var(--bg-card);
-    border-radius: 20px;
-    padding: 1.5rem;
-    border: 1px solid var(--border-color);
-    transition: all 0.2s;
-    cursor: pointer;
-  }
-
-  .entry-item:hover {
-    border-color: var(--accent-color);
-    box-shadow: var(--shadow);
-    transform: translateY(-2px);
-  }
-
-  .entry-item strong {
-    font-size: 1.35rem;
-    font-weight: 800;
-  }
-
-  .description {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-    line-height: 1.6;
-    margin-top: 1rem;
+  .history-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
   }
 
   .history-card {
-    background: var(--bg-primary);
-    border-radius: 16px;
-    padding: 1.5rem;
-    border: 1px solid var(--border-color);
+    background: #0f172a;
+    padding: 2rem;
+    border-radius: 20px;
+    border-left: 6px solid transparent;
   }
 
-  .history-date {
-    font-family: monospace;
-    font-size: 0.9rem;
-    color: var(--accent-color);
+  .history-card-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1rem;
   }
 
-  .author {
-    color: var(--text-muted);
+  .history-status {
+    font-weight: 900;
     font-size: 0.8rem;
-    margin-left: 1rem;
+    letter-spacing: 0.1em;
+  }
+
+  .history-author {
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+  }
+
+  .external-link-btn {
+    display: inline-block;
+    background: var(--accent-color);
+    color: white;
+    padding: 1rem 2rem;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 700;
+    margin-top: 2rem;
   }
 </style>
