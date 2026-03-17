@@ -48,7 +48,6 @@ func (d *DB) GetRadar(id string) (*types.Radar, error) {
 	}
 	radar.Meta.Version = version.String
 
-
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("radar not found: %s", id)
 	}
