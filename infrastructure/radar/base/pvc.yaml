@@ -5,7 +5,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nvme-3r-services
+  storageClassName: longhorn
   resources:
     requests:
       storage: 1Gi
