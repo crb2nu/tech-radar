@@ -1,10 +1,11 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: tech-radar-data
+  name: tech-radar-data-nvme
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: nvme-3r-services
   resources:
     requests:
       storage: 1Gi

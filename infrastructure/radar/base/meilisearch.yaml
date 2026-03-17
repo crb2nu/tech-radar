@@ -29,7 +29,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: meilisearch-data
+            claimName: meilisearch-data-nvme
 ---
 apiVersion: v1
 kind: Service
@@ -46,11 +46,12 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: meilisearch-data
+  name: meilisearch-data-nvme
   namespace: tech-radar
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: nvme-3r-services
   resources:
     requests:
       storage: 5Gi
