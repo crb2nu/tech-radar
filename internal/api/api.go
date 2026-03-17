@@ -139,10 +139,19 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.meili.Index("entries").Search(query, &meilisearch.SearchRequest{})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	// Search entries
+	entryRes, _ := s.meili.Index("entries").Search(query, &meilisearch.SearchRequest{
+		Limit: 10,
+	})
+
+	// Search projects
+	projectRes, _ := s.meili.Index("projects").Search(query, &meilisearch.SearchRequest{
+		Limit: 10,
+	})
+
+	res := map[string]interface{}{
+		"entries":  entryRes,
+		"projects": projectRes,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
