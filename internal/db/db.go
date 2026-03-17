@@ -30,11 +30,21 @@ func New(dataSourceName string) (*DB, error) {
 // GetRadar fetches a radar by ID.
 func (d *DB) GetRadar(id string) (*types.Radar, error) {
 	var radar types.Radar
-	err := d.pool.QueryRow(`
-		SELECT id, name, updated_at, version 
-		FROM radars WHERE id = $1 OR (name = 'default' AND $1 = 'default')
-		LIMIT 1
-	`, id).Scan(&radar.ID, &radar.Meta.Name, &radar.Meta.Updated, &radar.Meta.Version)
+	var err error
+
+	if id == "default" {
+		err = d.pool.QueryRow(`
+			SELECT id, name, updated_at, version 
+			FROM radars WHERE name = 'default' OR name = 'Enterprise Technology Radar'
+			ORDER BY name DESC
+			LIMIT 1
+		`).Scan(&radar.ID, &radar.Meta.Name, &radar.Meta.Updated, &radar.Meta.Version)
+	} else {
+		err = d.pool.QueryRow(`
+			SELECT id, name, updated_at, version 
+			FROM radars WHERE id = $1
+		`, id).Scan(&radar.ID, &radar.Meta.Name, &radar.Meta.Updated, &radar.Meta.Version)
+	}
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("radar not found: %s", id)
