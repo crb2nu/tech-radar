@@ -144,6 +144,21 @@ export interface MotionVector {
   summary: string;
 }
 
+export type RecommendationCategory = 'promote' | 'evaluate' | 'contain' | 'document' | 'standardize';
+
+export interface GovernanceRecommendation {
+  id: string;
+  title: string;
+  summary: string;
+  tone: 'good' | 'watch' | 'danger';
+  category: RecommendationCategory;
+  targetName: string;
+  actionLabel: string;
+  entryId?: string;
+  ring?: string;
+  projectCount?: number;
+}
+
 export interface RadarSection {
   ring: string;
   label: string;
@@ -171,6 +186,9 @@ export interface DashboardModel {
   motionEntries: MotionVector[];
   heatingUpEntries: MotionVector[];
   coolingEntries: MotionVector[];
+  recommendations: GovernanceRecommendation[];
+  criticalRecommendations: GovernanceRecommendation[];
+  strategicRecommendations: GovernanceRecommendation[];
   recentMoves: RecentMove[];
   quadrantBreakdown: LabelStat[];
   ringBreakdown: LabelStat[];
@@ -310,6 +328,17 @@ export function computeDashboardModel(
     motion.status === 'accelerating' || motion.status === 'heating' || motion.status === 'new'
   );
   const coolingEntries = activeMotionEntries.filter((motion) => motion.status === 'cooling');
+  const recommendations = buildRecommendations({
+    entries: filteredEntries,
+    opportunityQueue,
+    aiMcpOpportunityQueue,
+    driftEntries,
+    heatingUpEntries,
+    coolingEntries,
+    adrEntries
+  });
+  const criticalRecommendations = recommendations.filter((recommendation) => recommendation.tone === 'danger');
+  const strategicRecommendations = recommendations.filter((recommendation) => recommendation.tone !== 'danger');
   const recentMoves = insights?.recent_moves?.length ? insights.recent_moves : fallbackInsights.recentMoves;
   const quadrantBreakdown = insights?.quadrant_breakdown?.length ? insights.quadrant_breakdown : fallbackInsights.quadrantBreakdown;
   const ringBreakdown = insights?.ring_breakdown?.length ? insights.ring_breakdown : fallbackInsights.ringBreakdown;
@@ -357,6 +386,12 @@ export function computeDashboardModel(
       tone: summary.recent_decision_count > 0 ? 'neutral' : 'watch'
     },
     {
+      label: 'Action queue',
+      value: `${recommendations.length}`,
+      caption: recommendations[0] ? recommendations[0].title : 'No immediate governance actions are standing out',
+      tone: recommendations[0]?.tone ?? 'good'
+    },
+    {
       label: 'Motion vectors',
       value: `${activeMotionEntries.length}`,
       caption: activeMotionEntries[0]
@@ -398,6 +433,9 @@ export function computeDashboardModel(
     motionEntries,
     heatingUpEntries,
     coolingEntries,
+    recommendations,
+    criticalRecommendations,
+    strategicRecommendations,
     recentMoves,
     quadrantBreakdown,
     ringBreakdown,
@@ -796,6 +834,13 @@ function compareMotionVectors(a: MotionVector, b: MotionVector): number {
   return b.score - a.score;
 }
 
+function compareRecommendations(a: GovernanceRecommendation, b: GovernanceRecommendation): number {
+  const toneOrder = { danger: 0, watch: 1, good: 2 } as const;
+  const toneDiff = toneOrder[a.tone] - toneOrder[b.tone];
+  if (toneDiff !== 0) return toneDiff;
+  return a.title.localeCompare(b.title);
+}
+
 function ringWeight(ring?: string): number {
   switch (ring) {
     case 'adopt':
@@ -882,4 +927,124 @@ function relativeDaysLabel(days: number): string {
   const months = Math.max(1, Math.round(days / 30));
   if (months === 1) return '1 month ago';
   return `${months} months ago`;
+}
+
+function buildRecommendations(input: {
+  entries: Entry[];
+  opportunityQueue: UsageStat[];
+  aiMcpOpportunityQueue: UsageStat[];
+  driftEntries: Entry[];
+  heatingUpEntries: MotionVector[];
+  coolingEntries: MotionVector[];
+  adrEntries: Entry[];
+}): GovernanceRecommendation[] {
+  const recommendations: GovernanceRecommendation[] = [];
+  const seen = new Set<string>();
+  const adrBacked = new Set(input.adrEntries.map((entry) => entry.id));
+  const entryById = new Map(input.entries.map((entry) => [entry.id, entry]));
+
+  const push = (recommendation: GovernanceRecommendation) => {
+    if (seen.has(recommendation.id)) return;
+    seen.add(recommendation.id);
+    recommendations.push(recommendation);
+  };
+
+  for (const entry of input.driftEntries.slice(0, 3)) {
+    push({
+      id: `contain:${entry.id}`,
+      title: `Contain ${entry.name} drift`,
+      summary: `${entry.project_ids?.length ?? 0} projects still depend on a hold technology. Plan a migration checkpoint before the risk spreads further.`,
+      tone: 'danger',
+      category: 'contain',
+      targetName: entry.name,
+      entryId: entry.id,
+      ring: entry.ring,
+      projectCount: entry.project_ids?.length ?? 0,
+      actionLabel: 'Review hold plan'
+    });
+  }
+
+  for (const motion of input.heatingUpEntries.slice(0, 4)) {
+    const entry = entryById.get(motion.entryId);
+    if (!entry) continue;
+    const readyForPromotion =
+      (motion.status === 'accelerating' || motion.status === 'heating') &&
+      motion.projectCount >= 2 &&
+      (entry.ring === 'assess' || entry.ring === 'trial');
+
+    if (readyForPromotion) {
+      push({
+        id: `promote:${entry.id}`,
+        title: `Review ${entry.name} for promotion`,
+        summary: `${motion.summary} It already appears in ${motion.projectCount} monitored projects, so it may be ready to move deeper into the standard path.`,
+        tone: 'good',
+        category: 'promote',
+        targetName: entry.name,
+        entryId: entry.id,
+        ring: entry.ring,
+        projectCount: motion.projectCount,
+        actionLabel: 'Open decision'
+      });
+    }
+
+    if (!adrBacked.has(entry.id) && motion.projectCount >= 1) {
+      push({
+        id: `document:${entry.id}`,
+        title: `Add ADR evidence for ${entry.name}`,
+        summary: `${motion.summary} The decision is active but still lacks linked markdown evidence, which makes the rationale harder to defend.`,
+        tone: motion.status === 'accelerating' ? 'watch' : 'good',
+        category: 'document',
+        targetName: entry.name,
+        entryId: entry.id,
+        ring: entry.ring,
+        projectCount: motion.projectCount,
+        actionLabel: 'Attach ADR'
+      });
+    }
+  }
+
+  for (const motion of input.coolingEntries.slice(0, 3)) {
+    const entry = entryById.get(motion.entryId);
+    if (!entry) continue;
+    push({
+      id: `cooling:${entry.id}`,
+      title: `Reassess ${entry.name}`,
+      summary: `${motion.summary} Confirm whether this should keep cooling, pause in place, or move to hold with a clearer migration plan.`,
+      tone: motion.projectCount > 0 ? 'danger' : 'watch',
+      category: 'evaluate',
+      targetName: entry.name,
+      entryId: entry.id,
+      ring: entry.ring,
+      projectCount: motion.projectCount,
+      actionLabel: 'Inspect motion'
+    });
+  }
+
+  for (const item of input.opportunityQueue.slice(0, 3)) {
+    push({
+      id: `uncharted:${item.name.toLowerCase()}`,
+      title: `Chart ${item.name}`,
+      summary: `${item.count} projects are already using it without a radar call. Capture a decision before local choices harden into policy by accident.`,
+      tone: item.count >= 3 ? 'danger' : 'watch',
+      category: 'evaluate',
+      targetName: item.name,
+      projectCount: item.count,
+      actionLabel: 'Create radar entry'
+    });
+  }
+
+  for (const item of input.aiMcpOpportunityQueue.slice(0, 2)) {
+    push({
+      id: `standardize:${item.name.toLowerCase()}`,
+      title: `Standardize ${item.name}`,
+      summary: `${item.count} projects already show this AI or MCP signal. A default pattern now will reduce fragmented agent tooling decisions later.`,
+      tone: item.count >= 2 ? 'watch' : 'good',
+      category: 'standardize',
+      targetName: item.name,
+      projectCount: item.count,
+      actionLabel: 'Open intelligence'
+    });
+  }
+
+  return recommendations.sort(compareRecommendations).slice(0, 8);
 }

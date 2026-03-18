@@ -16,6 +16,7 @@
     ringOrder,
     uniqueTags,
     type Entry,
+    type GovernanceRecommendation,
     type Insights,
     type MotionVector,
     type Project,
@@ -87,7 +88,13 @@
     })
   );
   const motionByEntryId = $derived(new Map(dashboard.motionEntries.map((motion) => [motion.entryId, motion])));
+  const recommendationByEntryId = $derived(
+    new Map(dashboard.recommendations.filter((recommendation) => recommendation.entryId).map((recommendation) => [recommendation.entryId!, recommendation]))
+  );
   const selectedEntryMotion = $derived(selectedEntry ? entryMotion(selectedEntry) : null);
+  const selectedEntryRecommendation = $derived(
+    selectedEntry ? recommendationByEntryId.get(selectedEntry.id) ?? null : null
+  );
 
   const hasActiveFilters = $derived(
     Boolean(searchQuery.trim()) || selectedQuadrant !== 'all' || selectedRing !== 'all' || selectedTag !== 'all'
@@ -178,6 +185,22 @@
 
   function entryMotion(entry: Entry): MotionVector {
     return motionByEntryId.get(entry.id) ?? getEntryMotion(entry);
+  }
+
+  function applyRecommendation(recommendation: GovernanceRecommendation) {
+    if (recommendation.entryId) {
+      openEntryById(recommendation.entryId);
+      activeTab = recommendation.category === 'contain' ? 'drift' : 'insights';
+      return;
+    }
+
+    if (isAdminMode) {
+      openEntryForm(null, recommendation.targetName);
+      return;
+    }
+
+    searchQuery = recommendation.targetName;
+    activeTab = 'insights';
   }
 
   function clearFilters() {
@@ -445,54 +468,52 @@
               <article class="panel panel-large">
                 <div class="panel-header">
                   <div>
-                    <span class="eyebrow">Priority queue</span>
-                    <h2>Where the next governance work should go</h2>
+                    <span class="eyebrow">Action board</span>
+                    <h2>What the team should do next</h2>
                   </div>
                   {#if isAdminMode}
                     <button class="ghost-button" onclick={() => activeTab = 'insights'}>Open intelligence</button>
                   {/if}
                 </div>
 
-                <div class="queue-grid">
-                  <div class="queue-column">
-                    <h3>Uncharted demand</h3>
-                    {#if dashboard.opportunityQueue.length > 0}
-                      {#each dashboard.opportunityQueue.slice(0, 4) as item}
-                        <button class="signal-row actionable" onclick={() => {
-                          if (isAdminMode) {
-                            openEntryForm(null, item.name);
-                          } else {
-                            searchQuery = item.name;
-                          }
-                        }}>
-                          <div>
-                            <strong>{item.name}</strong>
-                            <span>Appears in {item.count} project{item.count === 1 ? '' : 's'} without an explicit decision.</span>
-                          </div>
-                          <span class="signal-pill watch">{item.count}</span>
-                        </button>
-                      {/each}
+                <div class="split-grid recommendation-grid">
+                  <section>
+                    <h3>Urgent calls</h3>
+                    {#if dashboard.criticalRecommendations.length > 0}
+                      <div class="signal-stack">
+                        {#each dashboard.criticalRecommendations as recommendation}
+                          <button class="signal-row actionable" onclick={() => applyRecommendation(recommendation)}>
+                            <div>
+                              <strong>{recommendation.title}</strong>
+                              <span>{recommendation.summary}</span>
+                            </div>
+                            <span class={`signal-pill ${recommendation.tone}`}>{recommendation.actionLabel}</span>
+                          </button>
+                        {/each}
+                      </div>
                     {:else}
-                      <div class="empty-card">Everything discovered in project scans already has a radar decision.</div>
+                      <div class="empty-card">No urgent governance interventions are standing out right now.</div>
                     {/if}
-                  </div>
+                  </section>
 
-                  <div class="queue-column">
-                    <h3>Drift pressure</h3>
-                    {#if dashboard.driftEntries.length > 0}
-                      {#each dashboard.driftEntries.slice(0, 4) as entry}
-                        <button class="signal-row actionable" onclick={() => { selectedEntry = entry; activeTab = 'drift'; }}>
-                          <div>
-                            <strong>{entry.name}</strong>
-                            <span>{entry.project_ids?.length ?? 0} projects still depend on a hold item.</span>
-                          </div>
-                          <span class="signal-pill danger">Hold</span>
-                        </button>
-                      {/each}
+                  <section>
+                    <h3>Strategic follow-ups</h3>
+                    {#if dashboard.strategicRecommendations.length > 0}
+                      <div class="signal-stack">
+                        {#each dashboard.strategicRecommendations.slice(0, 4) as recommendation}
+                          <button class="signal-row actionable" onclick={() => applyRecommendation(recommendation)}>
+                            <div>
+                              <strong>{recommendation.title}</strong>
+                              <span>{recommendation.summary}</span>
+                            </div>
+                            <span class={`signal-pill ${recommendation.tone}`}>{recommendation.actionLabel}</span>
+                          </button>
+                        {/each}
+                      </div>
                     {:else}
-                      <div class="empty-card">No active drift. Hold technologies are currently out of the monitored estate.</div>
+                      <div class="empty-card">No medium-priority follow-ups are waiting behind the urgent queue.</div>
                     {/if}
-                  </div>
+                  </section>
                 </div>
               </article>
 
@@ -975,6 +996,32 @@
 
           {#if activeTab === 'insights'}
             <div class="page-grid" in:fade>
+              <article class="panel panel-wide">
+                <div class="panel-header">
+                  <div>
+                    <span class="eyebrow">Governance recommendations</span>
+                    <h2>Ranked actions from the current signal set</h2>
+                  </div>
+                  <p>{dashboard.recommendations.length} recommendations are currently active.</p>
+                </div>
+
+                {#if dashboard.recommendations.length > 0}
+                  <div class="signal-stack">
+                    {#each dashboard.recommendations as recommendation}
+                      <button class="signal-row actionable" onclick={() => applyRecommendation(recommendation)}>
+                        <div>
+                          <strong>{recommendation.title}</strong>
+                          <span>{recommendation.summary}</span>
+                        </div>
+                        <span class={`signal-pill ${recommendation.tone}`}>{recommendation.actionLabel}</span>
+                      </button>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="empty-card">No recommendations are active. The current signals look balanced enough to monitor without immediate intervention.</div>
+                {/if}
+              </article>
+
               <article class="panel">
                 <div class="panel-header">
                   <div>
@@ -1319,6 +1366,16 @@
                   <span>{selectedEntryMotion.recentMoveCount} in 180 days</span>
                   <span>{selectedEntryMotion.streak}-step streak</span>
                 </div>
+              </div>
+            {/if}
+
+            {#if selectedEntryRecommendation}
+              <div class="motion-callout recommendation-callout" data-tone={selectedEntryRecommendation.tone}>
+                <div class="motion-callout-header">
+                  <span class={`signal-pill ${selectedEntryRecommendation.tone}`}>{selectedEntryRecommendation.actionLabel}</span>
+                  <strong>{selectedEntryRecommendation.title}</strong>
+                </div>
+                <p class="muted">{selectedEntryRecommendation.summary}</p>
               </div>
             {/if}
 
@@ -1946,7 +2003,6 @@
     gap: 0.7rem;
   }
 
-  .queue-column h3,
   .breakdown-stack h3,
   .ring-section h3,
   .modal-panel h3 {
@@ -2525,9 +2581,14 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .recommendation-grid section,
   .motion-split section {
     display: grid;
     gap: 0.8rem;
+  }
+
+  .recommendation-callout {
+    border-style: solid;
   }
 
   .form-error {
