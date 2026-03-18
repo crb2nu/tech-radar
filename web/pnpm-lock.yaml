@@ -11,6 +11,9 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^6.2.4
         version: 6.2.4(svelte@5.50.2)(vite@7.3.1)
+      '@typescript-eslint/types':
+        specifier: ^8.57.1
+        version: 8.57.1
       svelte:
         specifier: ^5.50.2
         version: 5.50.2
@@ -348,6 +351,10 @@ packages:
 
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
+
+  '@typescript-eslint/types@8.57.1':
+    resolution: {integrity: sha512-S29BOBPJSFUiblEl6RzPPjJt6w25A6XsBqRVDt53tA/tlL8q7ceQNZHTjPeONt/3S7KRI4quk+yP9jK2WjBiPQ==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
   acorn@8.15.0:
     resolution: {integrity: sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==}
@@ -722,6 +729,8 @@ snapshots:
       vitefu: 1.1.1(vite@7.3.1)
 
   '@types/estree@1.0.8': {}
+
+  '@typescript-eslint/types@8.57.1': {}
 
   acorn@8.15.0: {}
 

@@ -122,14 +122,66 @@ type DiscoveredTech struct {
 
 // Insights represents aggregated analytics for the ecosystem.
 type Insights struct {
-	TopUncharted  []UsageStat `json:"top_uncharted"`
-	TopAdopted    []UsageStat `json:"top_adopted"`
-	ProjectsCount int         `json:"projects_count"`
-	TechCount     int         `json:"tech_count"`
+	TopUncharted      []UsageStat     `json:"top_uncharted"`
+	TopAdopted        []UsageStat     `json:"top_adopted"`
+	TopDrift          []UsageStat     `json:"top_drift"`
+	TopTags           []UsageStat     `json:"top_tags"`
+	QuadrantBreakdown []LabelStat     `json:"quadrant_breakdown"`
+	RingBreakdown     []LabelStat     `json:"ring_breakdown"`
+	SourceBreakdown   []LabelStat     `json:"source_breakdown"`
+	RecentMoves       []RecentMove    `json:"recent_moves"`
+	ProjectHealth     []ProjectHealth `json:"project_health"`
+	Summary           InsightSummary  `json:"summary"`
+	ProjectsCount     int             `json:"projects_count"`
+	TechCount         int             `json:"tech_count"`
 }
 
 // UsageStat represents the usage count of a technology.
 type UsageStat struct {
 	Name  string `json:"name"`
 	Count int    `json:"count"`
+}
+
+// LabelStat represents a categorical count.
+type LabelStat struct {
+	Label string `json:"label"`
+	Count int    `json:"count"`
+}
+
+// RecentMove captures the latest movement for a tracked technology.
+type RecentMove struct {
+	Name         string    `json:"name"`
+	FromRing     string    `json:"from_ring,omitempty"`
+	ToRing       string    `json:"to_ring"`
+	Date         time.Time `json:"date"`
+	Reason       string    `json:"reason,omitempty"`
+	Author       string    `json:"author,omitempty"`
+	ProjectCount int       `json:"project_count"`
+}
+
+// ProjectHealth summarizes alignment between a project and the radar.
+type ProjectHealth struct {
+	ID                  string    `json:"id"`
+	Name                string    `json:"name"`
+	LastScan            time.Time `json:"last_scan"`
+	TotalTechs          int       `json:"total_techs"`
+	TrackedTechs        int       `json:"tracked_techs"`
+	UntrackedTechs      int       `json:"untracked_techs"`
+	AdoptTechs          int       `json:"adopt_techs"`
+	TrialTechs          int       `json:"trial_techs"`
+	AssessTechs         int       `json:"assess_techs"`
+	HoldTechs           int       `json:"hold_techs"`
+	CoveragePercent     float64   `json:"coverage_percent"`
+	RadarAlignmentScore int       `json:"radar_alignment_score"`
+	RiskLevel           string    `json:"risk_level"`
+	TopTechs            []string  `json:"top_techs"`
+}
+
+// InsightSummary provides headline metrics for the dashboard.
+type InsightSummary struct {
+	RadarCoveragePercent float64 `json:"radar_coverage_percent"`
+	TrackedUsageCount    int     `json:"tracked_usage_count"`
+	UnchartedUsageCount  int     `json:"uncharted_usage_count"`
+	ActiveDriftCount     int     `json:"active_drift_count"`
+	RecentDecisionCount  int     `json:"recent_decision_count"`
 }
