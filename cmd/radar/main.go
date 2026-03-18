@@ -357,6 +357,7 @@ func publishResult(apiURL, apiKey string, result types.ScanResult) error {
 
 	req.Header.Set("Content-Type", "application/json")
 	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 		req.Header.Set("X-API-Key", apiKey)
 	}
 

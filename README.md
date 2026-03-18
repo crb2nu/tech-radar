@@ -78,6 +78,8 @@ radar scan /path/to/project1 /path/to/project2
 radar scan . --auto-add
 ```
 
+To publish scan results to a central radar server, use `--publish --api-url ... --api-key ...`. The CLI sends the API key as `Authorization: Bearer <token>` and also keeps `X-API-Key` for compatibility with older servers.
+
 ### Generate Visualization
 
 ```bash

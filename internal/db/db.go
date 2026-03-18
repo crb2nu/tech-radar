@@ -1,7 +1,9 @@
 package db
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/lib/pq"
@@ -201,6 +203,29 @@ func (d *DB) SaveScan(result types.ScanResult) error {
 	}
 
 	return tx.Commit()
+}
+
+// HasAPIKeys reports whether ingestion auth should be enforced.
+func (d *DB) HasAPIKeys() (bool, error) {
+	var exists bool
+	err := d.pool.QueryRow(`SELECT EXISTS (SELECT 1 FROM api_keys LIMIT 1)`).Scan(&exists)
+	return exists, err
+}
+
+// ValidateAPIKey checks whether the provided key matches a stored API key hash.
+func (d *DB) ValidateAPIKey(apiKey string) (bool, error) {
+	var exists bool
+	err := d.pool.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM api_keys WHERE key_hash = $1 LIMIT 1
+		)
+	`, hashAPIKey(apiKey)).Scan(&exists)
+	return exists, err
+}
+
+func hashAPIKey(apiKey string) string {
+	sum := sha256.Sum256([]byte(apiKey))
+	return hex.EncodeToString(sum[:])
 }
 
 // UpsertEntry adds or updates a radar entry and records history.

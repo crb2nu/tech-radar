@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/meilisearch/meilisearch-go"
 	"gitlab.flexinfer.ai/services/tech-radar/internal/db"
@@ -13,8 +15,10 @@ import (
 
 // Server handles radar and ingestion API.
 type Server struct {
-	db    *db.DB
-	meili meilisearch.ServiceManager
+	db             *db.DB
+	meili          meilisearch.ServiceManager
+	hasAPIKeys     func() (bool, error)
+	validateAPIKey func(string) (bool, error)
 }
 
 // NewServer creates a new API Server.
@@ -24,9 +28,18 @@ func NewServer(database *db.DB) *Server {
 		meiliClient = meilisearch.New(host, meilisearch.WithAPIKey(os.Getenv("MEILI_MASTER_KEY")))
 	}
 
+	var hasAPIKeys func() (bool, error)
+	var validateAPIKey func(string) (bool, error)
+	if database != nil {
+		hasAPIKeys = database.HasAPIKeys
+		validateAPIKey = database.ValidateAPIKey
+	}
+
 	return &Server{
-		db:    database,
-		meili: meiliClient,
+		db:             database,
+		meili:          meiliClient,
+		hasAPIKeys:     hasAPIKeys,
+		validateAPIKey: validateAPIKey,
 	}
 }
 
@@ -37,7 +50,14 @@ func (s *Server) IngestScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Validate API Key from Authorization header
+	if err := s.authorizeIngestRequest(r); err != nil {
+		status := http.StatusUnauthorized
+		if errors.Is(err, errAPIKeyValidationUnavailable) {
+			status = http.StatusInternalServerError
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
 
 	var result types.ScanResult
 	if err := json.NewDecoder(r.Body).Decode(&result); err != nil {
@@ -50,6 +70,49 @@ func (s *Server) IngestScan(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"status": "queued"})
+}
+
+var errAPIKeyValidationUnavailable = errors.New("api key validation unavailable")
+
+func (s *Server) authorizeIngestRequest(r *http.Request) error {
+	if s.hasAPIKeys == nil {
+		return nil
+	}
+
+	required, err := s.hasAPIKeys()
+	if err != nil {
+		return errAPIKeyValidationUnavailable
+	}
+	if !required {
+		return nil
+	}
+
+	apiKey := extractAPIKey(r)
+	if apiKey == "" {
+		return errors.New("missing API key")
+	}
+	if s.validateAPIKey == nil {
+		return errAPIKeyValidationUnavailable
+	}
+
+	valid, err := s.validateAPIKey(apiKey)
+	if err != nil {
+		return errAPIKeyValidationUnavailable
+	}
+	if !valid {
+		return errors.New("invalid API key")
+	}
+
+	return nil
+}
+
+func extractAPIKey(r *http.Request) string {
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		return strings.TrimSpace(auth[len("Bearer "):])
+	}
+
+	return strings.TrimSpace(r.Header.Get("X-API-Key"))
 }
 
 func (s *Server) processIngestion(result types.ScanResult) {
