@@ -23,6 +23,33 @@ var quadrantOrder = map[string]int{
 	"techniques": 4,
 }
 
+var aiMCPKeywords = []string{
+	"mcp",
+	"model context protocol",
+	"modelcontextprotocol",
+	"openai",
+	"anthropic",
+	"claude",
+	"langchain",
+	"langgraph",
+	"llamaindex",
+	"llama-index",
+	"ollama",
+	"vllm",
+	"promptfoo",
+	"litellm",
+	"autogen",
+	"crewai",
+	"dspy",
+}
+
+var aiMCPSources = map[string]struct{}{
+	".mcp.json":                  {},
+	"mcp.json":                   {},
+	"claude_desktop_config.json": {},
+	"cline_mcp_settings.json":    {},
+}
+
 func buildInsights(radar *types.Radar, projects []types.Project) *types.Insights {
 	insights := &types.Insights{
 		ProjectsCount: len(projects),
@@ -61,11 +88,15 @@ func buildInsights(radar *types.Radar, projects []types.Project) *types.Insights
 	usageCounts := map[string]int{}
 	trackedCounts := map[string]int{}
 	unchartedCounts := map[string]int{}
+	aiMCPTrackedCounts := map[string]int{}
+	aiMCPUnchartedCounts := map[string]int{}
 	sourceCounts := map[string]int{}
+	aiMCPProjects := 0
 
 	projectHealth := make([]types.ProjectHealth, 0, len(projects))
 	for _, project := range projects {
 		seenProjectTechs := map[string]bool{}
+		projectHasAIMCP := false
 		health := types.ProjectHealth{
 			ID:       project.ID,
 			Name:     project.Name,
@@ -89,11 +120,19 @@ func buildInsights(radar *types.Radar, projects []types.Project) *types.Insights
 			if !tracked {
 				health.UntrackedTechs++
 				unchartedCounts[tech.Name]++
+				if isAIMCPSignal(tech.Name, tech.Source) {
+					projectHasAIMCP = true
+					aiMCPUnchartedCounts[tech.Name]++
+				}
 				continue
 			}
 
 			health.TrackedTechs++
 			trackedCounts[entry.Name]++
+			if isAIMCPSignal(entry.Name, tech.Source) || isAIMCPSignal(tech.Name, tech.Source) {
+				projectHasAIMCP = true
+				aiMCPTrackedCounts[entry.Name]++
+			}
 
 			switch entry.Ring {
 			case types.RingAdopt:
@@ -118,6 +157,9 @@ func buildInsights(radar *types.Radar, projects []types.Project) *types.Insights
 		)
 		health.RiskLevel = riskLevel(health)
 		projectHealth = append(projectHealth, health)
+		if projectHasAIMCP {
+			aiMCPProjects++
+		}
 	}
 
 	sort.Slice(projectHealth, func(i, j int) bool {
@@ -148,6 +190,8 @@ func buildInsights(radar *types.Radar, projects []types.Project) *types.Insights
 	insights.TopUncharted = usageStatsFromMap(unchartedCounts, 8)
 	insights.TopAdopted = usageStatsFromMap(trackedCounts, 8)
 	insights.TopDrift = usageStatsFromMap(driftCounts, 8)
+	insights.TopAIMCPUncharted = usageStatsFromMap(aiMCPUnchartedCounts, 8)
+	insights.TopAIMCPTracked = usageStatsFromMap(aiMCPTrackedCounts, 8)
 	insights.TopTags = usageStatsFromMap(tagCounts, 8)
 	insights.QuadrantBreakdown = labelStatsFromMap(quadrantCounts, quadrantOrder)
 	insights.RingBreakdown = labelStatsFromMap(ringCounts, map[string]int{
@@ -166,9 +210,28 @@ func buildInsights(radar *types.Radar, projects []types.Project) *types.Insights
 		UnchartedUsageCount:  len(unchartedCounts),
 		ActiveDriftCount:     len(driftCounts),
 		RecentDecisionCount:  len(recentMoves),
+		AIMCPProjectCount:    aiMCPProjects,
+		AIMCPUnchartedCount:  len(aiMCPUnchartedCounts),
 	}
 
 	return insights
+}
+
+func isAIMCPSignal(name, source string) bool {
+	normalizedName := strings.ToLower(strings.TrimSpace(name))
+	if normalizedName != "" {
+		for _, keyword := range aiMCPKeywords {
+			if strings.Contains(normalizedName, keyword) {
+				return true
+			}
+		}
+	}
+
+	if _, ok := aiMCPSources[strings.ToLower(strings.TrimSpace(source))]; ok {
+		return true
+	}
+
+	return false
 }
 
 func latestMove(entry types.Entry) (types.RecentMove, bool) {

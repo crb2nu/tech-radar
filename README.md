@@ -139,12 +139,19 @@ scan:
     - pyproject.toml
     - Cargo.toml
     - requirements.txt
+    - .mcp.json
+    - mcp.json
+    - claude_desktop_config.json
+    - cline_mcp_settings.json
 
   # Mappings from package names to radar entries
   mappings:
     react: { name: React, quadrant: frameworks }
     typescript: { name: TypeScript, quadrant: languages }
+    openai: { name: OpenAI API, quadrant: platforms }
     "@anthropic-ai/sdk": { name: Claude API, quadrant: platforms }
+    "@modelcontextprotocol/sdk": { name: Model Context Protocol, quadrant: tools }
+    "github.com/mark3labs/mcp-go": { name: mcp-go, quadrant: tools }
 
 visualization:
   colors:
@@ -153,6 +160,8 @@ visualization:
     assess: "#fbdb84"
     hold: "#efafa9"
 ```
+
+The scanner now understands common MCP config files as repo-local discovery signals, so AI/agentic tooling can show up in project scans even when it is configured outside a language manifest.
 
 ## Architecture
 

@@ -406,6 +406,9 @@
                   {/each}
                 </select>
               </label>
+              <button class="ghost-button" onclick={() => activeTab = 'insights'}>
+                AI / MCP watch
+              </button>
               <button class="ghost-button" onclick={clearFilters} disabled={!hasActiveFilters}>Reset</button>
             </div>
           </div>
@@ -556,6 +559,49 @@
                       </div>
                     </button>
                   {/each}
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
+                    <span class="eyebrow">AI / MCP watch</span>
+                    <h2>Agentic tooling needing decisions</h2>
+                  </div>
+                  <p>{dashboard.aiMcpProjectCount} projects show AI or MCP signals.</p>
+                </div>
+
+                <div class="signal-stack">
+                  {#if dashboard.aiMcpOpportunityQueue.length > 0}
+                    {#each dashboard.aiMcpOpportunityQueue.slice(0, 4) as item}
+                      <button class="signal-row actionable" onclick={() => {
+                        if (isAdminMode) {
+                          openEntryForm(null, item.name);
+                        } else {
+                          searchQuery = item.name;
+                          activeTab = 'insights';
+                        }
+                      }}>
+                        <div>
+                          <strong>{item.name}</strong>
+                          <span>{item.count} projects are already experimenting without a radar call.</span>
+                        </div>
+                        <span class="signal-pill watch">{item.count}</span>
+                      </button>
+                    {/each}
+                  {:else if dashboard.aiMcpAdoptionLeaders.length > 0}
+                    {#each dashboard.aiMcpAdoptionLeaders.slice(0, 4) as item}
+                      <div class="signal-row">
+                        <div>
+                          <strong>{item.name}</strong>
+                          <span>Tracked agentic tooling already present in {item.count} monitored projects.</span>
+                        </div>
+                        <span class="signal-pill good">{item.count}</span>
+                      </div>
+                    {/each}
+                  {:else}
+                    <div class="empty-card">No AI or MCP signals are showing up in scans yet.</div>
+                  {/if}
                 </div>
               </article>
 
@@ -841,6 +887,48 @@
 
           {#if activeTab === 'insights'}
             <div class="page-grid" in:fade>
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
+                    <span class="eyebrow">AI / MCP lane</span>
+                    <h2>Agentic signals to govern next</h2>
+                  </div>
+                  <p>{dashboard.aiMcpProjectCount} projects currently carry AI or MCP traces.</p>
+                </div>
+
+                <div class="signal-stack">
+                  {#if dashboard.aiMcpOpportunityQueue.length > 0}
+                    {#each dashboard.aiMcpOpportunityQueue as item}
+                      <button class="signal-row actionable" onclick={() => {
+                        if (isAdminMode) {
+                          openEntryForm(null, item.name);
+                        } else {
+                          searchQuery = item.name;
+                        }
+                      }}>
+                        <div>
+                          <strong>{item.name}</strong>
+                          <span>{item.count} projects show this AI/MCP signal without a formal decision.</span>
+                        </div>
+                        <span class="signal-pill watch">{item.count}</span>
+                      </button>
+                    {/each}
+                  {:else if dashboard.aiMcpAdoptionLeaders.length > 0}
+                    {#each dashboard.aiMcpAdoptionLeaders as item}
+                      <div class="signal-row">
+                        <div>
+                          <strong>{item.name}</strong>
+                          <span>Tracked AI/MCP standard in {item.count} monitored projects.</span>
+                        </div>
+                        <span class="signal-pill good">{item.count}</span>
+                      </div>
+                    {/each}
+                  {:else}
+                    <div class="empty-card">No AI or MCP discoveries are showing up in the latest scans.</div>
+                  {/if}
+                </div>
+              </article>
+
               <article class="panel">
                 <div class="panel-header">
                   <div>

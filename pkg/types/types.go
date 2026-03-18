@@ -125,6 +125,8 @@ type Insights struct {
 	TopUncharted      []UsageStat     `json:"top_uncharted"`
 	TopAdopted        []UsageStat     `json:"top_adopted"`
 	TopDrift          []UsageStat     `json:"top_drift"`
+	TopAIMCPUncharted []UsageStat     `json:"top_ai_mcp_uncharted"`
+	TopAIMCPTracked   []UsageStat     `json:"top_ai_mcp_tracked"`
 	TopTags           []UsageStat     `json:"top_tags"`
 	QuadrantBreakdown []LabelStat     `json:"quadrant_breakdown"`
 	RingBreakdown     []LabelStat     `json:"ring_breakdown"`
@@ -184,4 +186,6 @@ type InsightSummary struct {
 	UnchartedUsageCount  int     `json:"uncharted_usage_count"`
 	ActiveDriftCount     int     `json:"active_drift_count"`
 	RecentDecisionCount  int     `json:"recent_decision_count"`
+	AIMCPProjectCount    int     `json:"ai_mcp_project_count"`
+	AIMCPUnchartedCount  int     `json:"ai_mcp_uncharted_count"`
 }
