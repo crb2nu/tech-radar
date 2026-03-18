@@ -7,6 +7,7 @@
     formatDate,
     formatRelativeDate,
     getBlipPosition,
+    isADRReference,
     quadrantMeta,
     ringMeta,
     ringOrder,
@@ -608,6 +609,31 @@
               <article class="panel">
                 <div class="panel-header">
                   <div>
+                    <span class="eyebrow">Decision evidence</span>
+                    <h2>ADR-backed radar calls</h2>
+                  </div>
+                </div>
+
+                {#if dashboard.adrEntries.length > 0}
+                  <div class="signal-stack">
+                    {#each dashboard.adrEntries.slice(0, 4) as entry}
+                      <button class="signal-row actionable" onclick={() => selectedEntry = entry}>
+                        <div>
+                          <strong>{entry.name}</strong>
+                          <span>{entry.link}</span>
+                        </div>
+                        <span class="signal-pill good">ADR</span>
+                      </button>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="empty-card">No radar entries are linked to ADR evidence yet.</div>
+                {/if}
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
                     <span class="eyebrow">Decision ledger</span>
                     <h2>Recent movement</h2>
                   </div>
@@ -1010,6 +1036,30 @@
               <article class="panel">
                 <div class="panel-header">
                   <div>
+                    <span class="eyebrow">ADR evidence</span>
+                    <h2>Decision documents tied to the radar</h2>
+                  </div>
+                </div>
+                {#if dashboard.adrEntries.length > 0}
+                  <div class="signal-stack">
+                    {#each dashboard.adrEntries as entry}
+                      <button class="signal-row actionable" onclick={() => selectedEntry = entry}>
+                        <div>
+                          <strong>{entry.name}</strong>
+                          <span>{entry.link}</span>
+                        </div>
+                        <span class="signal-pill good">ADR</span>
+                      </button>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="empty-card">No ADR-linked radar entries yet. Scan a repo with ADRs or attach one in admin mode.</div>
+                {/if}
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
                     <span class="eyebrow">Governance tempo</span>
                     <h2>Recent ring changes</h2>
                   </div>
@@ -1145,7 +1195,14 @@
             </div>
 
             {#if selectedEntry.link}
-              <a class="text-link" href={selectedEntry.link} target="_blank" rel="noreferrer">Open technical context</a>
+              {#if isADRReference(selectedEntry.link)}
+                <div class="reference-block">
+                  <span class="eyebrow">ADR reference</span>
+                  <code>{selectedEntry.link}</code>
+                </div>
+              {:else}
+                <a class="text-link" href={selectedEntry.link} target="_blank" rel="noreferrer">Open technical context</a>
+              {/if}
             {/if}
           </article>
 
@@ -1261,8 +1318,8 @@
             </label>
 
             <label>
-              <span>Reference link</span>
-              <input bind:value={editEntryData.link} type="url" placeholder="https://..." />
+              <span>Reference link or ADR path</span>
+              <input bind:value={editEntryData.link} type="text" placeholder="https://... or docs/adrs/0001-example.md" />
             </label>
           </div>
 

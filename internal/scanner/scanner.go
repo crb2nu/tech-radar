@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -29,7 +30,7 @@ func (s *Scanner) Scan(root string) (*types.ScanResult, error) {
 		Technologies: []types.DiscoveredTech{},
 		Files:        make(map[string][]string),
 	}
-	seenTechs := make(map[string]bool)
+	seenTechs := make(map[string]int)
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -37,7 +38,6 @@ func (s *Scanner) Scan(root string) (*types.ScanResult, error) {
 		}
 
 		if d.IsDir() {
-			// Skip hidden directories like .git, .node_modules, etc.
 			if strings.HasPrefix(d.Name(), ".") && d.Name() != "." && d.Name() != ".." {
 				return filepath.SkipDir
 			}
@@ -47,52 +47,63 @@ func (s *Scanner) Scan(root string) (*types.ScanResult, error) {
 			return nil
 		}
 
-		// Check if file is in the list of files to scan
 		filename := d.Name()
-		shouldScan := false
-		for _, f := range s.config.Files {
-			if f == filename {
-				shouldScan = true
-				break
-			}
-		}
-
-		if !shouldScan {
+		if !s.shouldScanPath(path, filename) {
 			return nil
 		}
 
-		// Parse the file
 		techs, err := s.parseFile(path, filename)
 		if err != nil {
 			return nil
 		}
 
-		if len(techs) > 0 {
-			relPath, _ := filepath.Rel(root, path)
-			var techNames []string
-			for _, t := range techs {
-				t = s.normalizeTech(t)
-				if t.Name == "" {
-					continue
-				}
-				techNames = appendIfMissing(techNames, t.Name)
-				key := strings.ToLower(t.Name)
-				if seenTechs[key] {
-					continue
-				}
-				seenTechs[key] = true
-				result.Technologies = append(result.Technologies, t)
-			}
-			result.Files[relPath] = techNames
+		if len(techs) == 0 {
+			return nil
 		}
 
+		relPath, _ := filepath.Rel(root, path)
+		var techNames []string
+		for _, tech := range techs {
+			tech = s.normalizeTech(tech)
+			if tech.Name == "" {
+				continue
+			}
+			if tech.EvidencePath == path {
+				tech.EvidencePath = filepath.ToSlash(relPath)
+			}
+			techNames = appendIfMissing(techNames, tech.Name)
+
+			key := strings.ToLower(strings.TrimSpace(tech.Name))
+			if idx, ok := seenTechs[key]; ok {
+				result.Technologies[idx] = mergeTech(result.Technologies[idx], tech)
+				continue
+			}
+
+			seenTechs[key] = len(result.Technologies)
+			result.Technologies = append(result.Technologies, tech)
+		}
+		result.Files[relPath] = techNames
 		return nil
 	})
 
 	return result, err
 }
 
+func (s *Scanner) shouldScanPath(path, filename string) bool {
+	for _, f := range s.config.Files {
+		if f == filename {
+			return true
+		}
+	}
+
+	return isADRMarkdownPath(path)
+}
+
 func (s *Scanner) parseFile(path, filename string) ([]types.DiscoveredTech, error) {
+	if isADRMarkdownPath(path) {
+		return s.parseADRMarkdown(path)
+	}
+
 	switch filename {
 	case "package.json":
 		return s.parsePackageJSON(path)
@@ -107,6 +118,7 @@ func (s *Scanner) parseFile(path, filename string) ([]types.DiscoveredTech, erro
 	case ".mcp.json", "mcp.json", "claude_desktop_config.json", "cline_mcp_settings.json":
 		return s.parseMCPConfigJSON(path, filename)
 	}
+
 	return nil, nil
 }
 
@@ -117,7 +129,6 @@ func (s *Scanner) normalizeTech(tech types.DiscoveredTech) types.DiscoveredTech 
 			tech.Name = hint.Name
 		}
 	}
-
 	return tech
 }
 
@@ -309,7 +320,6 @@ func (s *Scanner) parsePyprojectToml(path string) ([]types.DiscoveredTech, error
 
 	var techs []types.DiscoveredTech
 
-	// Standard PEP 621 dependencies
 	for _, dep := range pyproject.Project.Dependencies {
 		name := dep
 		version := ""
@@ -356,6 +366,108 @@ func (s *Scanner) parsePyprojectToml(path string) ([]types.DiscoveredTech, error
 	}
 
 	return techs, nil
+}
+
+func (s *Scanner) parseADRMarkdown(path string) ([]types.DiscoveredTech, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	content := string(data)
+	title := adrTitle(content, path)
+	mentions := s.detectADRTechMentions(content)
+	if len(mentions) == 0 {
+		return nil, nil
+	}
+
+	techs := make([]types.DiscoveredTech, 0, len(mentions))
+	for _, mention := range mentions {
+		techs = append(techs, types.DiscoveredTech{
+			Name:          mention.Name,
+			Source:        "adr",
+			Quadrant:      mention.Quadrant,
+			EvidencePath:  path,
+			EvidenceTitle: title,
+		})
+	}
+
+	return techs, nil
+}
+
+func (s *Scanner) detectADRTechMentions(content string) []types.EntryHint {
+	normalized := strings.ToLower(content)
+	seen := make(map[string]bool)
+	mentions := make([]types.EntryHint, 0)
+
+	for key, hint := range s.config.Mappings {
+		candidates := []string{strings.ToLower(strings.TrimSpace(key))}
+		if hint.Name != "" {
+			candidates = append(candidates, strings.ToLower(strings.TrimSpace(hint.Name)))
+		}
+
+		matched := false
+		for _, candidate := range candidates {
+			if candidate == "" {
+				continue
+			}
+			if strings.Contains(normalized, candidate) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+
+		name := hint.Name
+		if name == "" {
+			name = key
+		}
+		lookup := strings.ToLower(strings.TrimSpace(name))
+		if seen[lookup] {
+			continue
+		}
+		seen[lookup] = true
+		mentions = append(mentions, types.EntryHint{Name: name, Quadrant: hint.Quadrant})
+	}
+
+	sort.Slice(mentions, func(i, j int) bool {
+		return strings.ToLower(mentions[i].Name) < strings.ToLower(mentions[j].Name)
+	})
+
+	return mentions
+}
+
+func isADRMarkdownPath(path string) bool {
+	lower := strings.ToLower(filepath.ToSlash(path))
+	if !strings.HasSuffix(lower, ".md") {
+		return false
+	}
+
+	segments := strings.Split(lower, "/")
+	for _, segment := range segments {
+		switch segment {
+		case "adr", "adrs", "architecture-decisions", "decisions":
+			return true
+		}
+	}
+
+	return false
+}
+
+func adrTitle(content, path string) string {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			return strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+		}
+	}
+
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	base = strings.ReplaceAll(base, "-", " ")
+	base = strings.ReplaceAll(base, "_", " ")
+	return strings.TrimSpace(base)
 }
 
 func (s *Scanner) parseMCPConfigJSON(path, filename string) ([]types.DiscoveredTech, error) {
@@ -472,6 +584,25 @@ func mcpCandidateFromToken(token string) string {
 	}
 
 	return ""
+}
+
+func mergeTech(existing, next types.DiscoveredTech) types.DiscoveredTech {
+	if existing.Quadrant == "" {
+		existing.Quadrant = next.Quadrant
+	}
+	if existing.Version == "" {
+		existing.Version = next.Version
+	}
+	if next.Source == "adr" && existing.Source != "adr" {
+		existing.Source = next.Source
+	}
+	if existing.EvidencePath == "" {
+		existing.EvidencePath = next.EvidencePath
+	}
+	if existing.EvidenceTitle == "" {
+		existing.EvidenceTitle = next.EvidenceTitle
+	}
+	return existing
 }
 
 func appendUniqueTech(techs *[]types.DiscoveredTech, tech types.DiscoveredTech) {

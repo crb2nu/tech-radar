@@ -162,6 +162,7 @@ visualization:
 ```
 
 The scanner now understands common MCP config files as repo-local discovery signals, so AI/agentic tooling can show up in project scans even when it is configured outside a language manifest.
+ADR markdown files under common decision directories such as `docs/adrs/`, `docs/adr/`, `adrs/`, and `decisions/` are also scanned automatically. When an ADR mentions a mapped technology, `radar scan --auto-add` can attach that ADR path directly to the resulting radar entry as decision evidence.
 
 ## Architecture
 

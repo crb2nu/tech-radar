@@ -148,6 +148,7 @@ export interface DashboardModel {
   aiMcpOpportunityQueue: UsageStat[];
   aiMcpAdoptionLeaders: UsageStat[];
   aiMcpProjectCount: number;
+  adrEntries: Entry[];
   recentMoves: RecentMove[];
   quadrantBreakdown: LabelStat[];
   ringBreakdown: LabelStat[];
@@ -275,6 +276,9 @@ export function computeDashboardModel(
   const aiMcpAdoptionLeaders = insights?.top_ai_mcp_tracked?.length
     ? insights.top_ai_mcp_tracked
     : fallbackInsights.topAIMCPTracked;
+  const adrEntries = filteredEntries
+    .filter((entry) => isADRReference(entry.link))
+    .sort((a, b) => (b.history?.length ?? 0) - (a.history?.length ?? 0) || a.name.localeCompare(b.name));
   const recentMoves = insights?.recent_moves?.length ? insights.recent_moves : fallbackInsights.recentMoves;
   const quadrantBreakdown = insights?.quadrant_breakdown?.length ? insights.quadrant_breakdown : fallbackInsights.quadrantBreakdown;
   const ringBreakdown = insights?.ring_breakdown?.length ? insights.ring_breakdown : fallbackInsights.ringBreakdown;
@@ -326,6 +330,12 @@ export function computeDashboardModel(
       value: `${summary.ai_mcp_uncharted_count}`,
       caption: `${aiMcpProjectCount} projects already show agentic tooling signals`,
       tone: summary.ai_mcp_uncharted_count === 0 ? 'good' : summary.ai_mcp_uncharted_count < 4 ? 'watch' : 'danger'
+    },
+    {
+      label: 'ADR evidence',
+      value: `${adrEntries.length}`,
+      caption: 'Radar decisions that already point to ADR or markdown evidence',
+      tone: adrEntries.length > 0 ? 'good' : 'watch'
     }
   ];
 
@@ -345,6 +355,7 @@ export function computeDashboardModel(
     aiMcpOpportunityQueue,
     aiMcpAdoptionLeaders,
     aiMcpProjectCount,
+    adrEntries,
     recentMoves,
     quadrantBreakdown,
     ringBreakdown,
@@ -401,6 +412,12 @@ export function formatRelativeDate(value?: string): string {
   const diffMonths = Math.round(diffDays / 30);
   if (diffMonths === 1) return '1 month ago';
   return `${diffMonths} months ago`;
+}
+
+export function isADRReference(link?: string): boolean {
+  if (!link) return false;
+  const normalized = link.toLowerCase();
+  return normalized.endsWith('.md') || normalized.includes('/adr') || normalized.includes('/adrs');
 }
 
 function buildFallbackInsights(entries: Entry[], projects: ProjectIntelligence[]) {
