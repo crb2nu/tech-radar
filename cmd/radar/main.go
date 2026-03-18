@@ -105,10 +105,25 @@ func initCmd() *cobra.Command {
 						"requirements.txt",
 						"pyproject.toml",
 						"Cargo.toml",
+						".mcp.json",
+						"mcp.json",
+						"claude_desktop_config.json",
+						"cline_mcp_settings.json",
 					},
 					Mappings: map[string]types.EntryHint{
-						"react":      {Name: "React", Quadrant: types.QuadrantFrameworks},
-						"typescript": {Name: "TypeScript", Quadrant: types.QuadrantLanguages},
+						"react":                       {Name: "React", Quadrant: types.QuadrantFrameworks},
+						"typescript":                  {Name: "TypeScript", Quadrant: types.QuadrantLanguages},
+						"openai":                      {Name: "OpenAI API", Quadrant: types.QuadrantPlatforms},
+						"@anthropic-ai/sdk":           {Name: "Claude API", Quadrant: types.QuadrantPlatforms},
+						"langchain":                   {Name: "LangChain", Quadrant: types.QuadrantFrameworks},
+						"langgraph":                   {Name: "LangGraph", Quadrant: types.QuadrantFrameworks},
+						"ollama":                      {Name: "Ollama", Quadrant: types.QuadrantPlatforms},
+						"vllm":                        {Name: "vLLM", Quadrant: types.QuadrantPlatforms},
+						"promptfoo":                   {Name: "Promptfoo", Quadrant: types.QuadrantTools},
+						"litellm":                     {Name: "LiteLLM", Quadrant: types.QuadrantPlatforms},
+						"github.com/mark3labs/mcp-go": {Name: "mcp-go", Quadrant: types.QuadrantTools},
+						"@modelcontextprotocol/sdk":   {Name: "Model Context Protocol", Quadrant: types.QuadrantTools},
+						"@modelcontextprotocol/server-filesystem": {Name: "Filesystem MCP Server", Quadrant: types.QuadrantTools},
 					},
 				},
 				Visualization: types.VisualizationConfig{
@@ -262,7 +277,17 @@ func scanCmd() *cobra.Command {
 			// Load config if available
 			var config types.Config
 			// Default config
-			config.Scan.Files = []string{"package.json", "go.mod", "requirements.txt", "pyproject.toml", "Cargo.toml"}
+			config.Scan.Files = []string{
+				"package.json",
+				"go.mod",
+				"requirements.txt",
+				"pyproject.toml",
+				"Cargo.toml",
+				".mcp.json",
+				"mcp.json",
+				"claude_desktop_config.json",
+				"cline_mcp_settings.json",
+			}
 
 			if data, err := os.ReadFile(".tech-radar/config.yaml"); err == nil {
 				yaml.Unmarshal(data, &config)

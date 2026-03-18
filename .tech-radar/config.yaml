@@ -5,6 +5,10 @@ scan:
         - requirements.txt
         - pyproject.toml
         - Cargo.toml
+        - .mcp.json
+        - mcp.json
+        - claude_desktop_config.json
+        - cline_mcp_settings.json
     mappings:
         react:
             name: React
@@ -12,6 +16,39 @@ scan:
         typescript:
             name: TypeScript
             quadrant: languages
+        openai:
+            name: OpenAI API
+            quadrant: platforms
+        '@anthropic-ai/sdk':
+            name: Claude API
+            quadrant: platforms
+        langchain:
+            name: LangChain
+            quadrant: frameworks
+        langgraph:
+            name: LangGraph
+            quadrant: frameworks
+        ollama:
+            name: Ollama
+            quadrant: platforms
+        vllm:
+            name: vLLM
+            quadrant: platforms
+        promptfoo:
+            name: Promptfoo
+            quadrant: tools
+        litellm:
+            name: LiteLLM
+            quadrant: platforms
+        github.com/mark3labs/mcp-go:
+            name: mcp-go
+            quadrant: tools
+        '@modelcontextprotocol/sdk':
+            name: Model Context Protocol
+            quadrant: tools
+        '@modelcontextprotocol/server-filesystem':
+            name: Filesystem MCP Server
+            quadrant: tools
     exclude: []
 visualization:
     colors:

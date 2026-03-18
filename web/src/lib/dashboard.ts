@@ -86,12 +86,16 @@ export interface InsightSummary {
   uncharted_usage_count: number;
   active_drift_count: number;
   recent_decision_count: number;
+  ai_mcp_project_count: number;
+  ai_mcp_uncharted_count: number;
 }
 
 export interface Insights {
   top_uncharted?: UsageStat[];
   top_adopted?: UsageStat[];
   top_drift?: UsageStat[];
+  top_ai_mcp_uncharted?: UsageStat[];
+  top_ai_mcp_tracked?: UsageStat[];
   top_tags?: UsageStat[];
   quadrant_breakdown?: LabelStat[];
   ring_breakdown?: LabelStat[];
@@ -141,6 +145,9 @@ export interface DashboardModel {
   opportunityQueue: UsageStat[];
   adoptionLeaders: UsageStat[];
   driftLeaders: UsageStat[];
+  aiMcpOpportunityQueue: UsageStat[];
+  aiMcpAdoptionLeaders: UsageStat[];
+  aiMcpProjectCount: number;
   recentMoves: RecentMove[];
   quadrantBreakdown: LabelStat[];
   ringBreakdown: LabelStat[];
@@ -262,11 +269,18 @@ export function computeDashboardModel(
   const opportunityQueue = insights?.top_uncharted?.length ? insights.top_uncharted : fallbackInsights.topUncharted;
   const adoptionLeaders = insights?.top_adopted?.length ? insights.top_adopted : fallbackInsights.topAdopted;
   const driftLeaders = insights?.top_drift?.length ? insights.top_drift : fallbackInsights.topDrift;
+  const aiMcpOpportunityQueue = insights?.top_ai_mcp_uncharted?.length
+    ? insights.top_ai_mcp_uncharted
+    : fallbackInsights.topAIMCPUncharted;
+  const aiMcpAdoptionLeaders = insights?.top_ai_mcp_tracked?.length
+    ? insights.top_ai_mcp_tracked
+    : fallbackInsights.topAIMCPTracked;
   const recentMoves = insights?.recent_moves?.length ? insights.recent_moves : fallbackInsights.recentMoves;
   const quadrantBreakdown = insights?.quadrant_breakdown?.length ? insights.quadrant_breakdown : fallbackInsights.quadrantBreakdown;
   const ringBreakdown = insights?.ring_breakdown?.length ? insights.ring_breakdown : fallbackInsights.ringBreakdown;
   const sourceBreakdown = insights?.source_breakdown?.length ? insights.source_breakdown : fallbackInsights.sourceBreakdown;
   const topTags = insights?.top_tags?.length ? insights.top_tags : fallbackInsights.topTags;
+  const aiMcpProjectCount = insights?.summary?.ai_mcp_project_count ?? fallbackInsights.summary.ai_mcp_project_count;
 
   const projectSpotlight = filteredProjects.slice(0, 6);
   const radarSections = ringOrder.map((ring) => ({
@@ -306,6 +320,12 @@ export function computeDashboardModel(
       value: `${summary.recent_decision_count}`,
       caption: 'Recent governance moves captured in history',
       tone: summary.recent_decision_count > 0 ? 'neutral' : 'watch'
+    },
+    {
+      label: 'AI / MCP frontier',
+      value: `${summary.ai_mcp_uncharted_count}`,
+      caption: `${aiMcpProjectCount} projects already show agentic tooling signals`,
+      tone: summary.ai_mcp_uncharted_count === 0 ? 'good' : summary.ai_mcp_uncharted_count < 4 ? 'watch' : 'danger'
     }
   ];
 
@@ -322,6 +342,9 @@ export function computeDashboardModel(
     opportunityQueue,
     adoptionLeaders,
     driftLeaders,
+    aiMcpOpportunityQueue,
+    aiMcpAdoptionLeaders,
+    aiMcpProjectCount,
     recentMoves,
     quadrantBreakdown,
     ringBreakdown,
@@ -414,6 +437,11 @@ function buildFallbackInsights(entries: Entry[], projects: ProjectIntelligence[]
   const quadrantBreakdown = toLabelStats(countByName(entries.map((entry) => entry.quadrant)));
   const ringBreakdown = toLabelStats(countByName(entries.map((entry) => entry.ring)));
   const sourceBreakdown = toLabelStats(countByName(projects.flatMap((project) => (project.technologies ?? []).map((tech) => tech.source))));
+  const topAIMCPUncharted = topUncharted.filter((item) => isAIMCPSignal(item.name));
+  const topAIMCPTracked = topAdopted.filter((item) => isAIMCPSignal(item.name));
+  const aiMcpProjectCount = projects.filter((project) =>
+    (project.technologies ?? []).some((tech) => isAIMCPSignal(tech.name, tech.source))
+  ).length;
   const recentMoves = entries
     .flatMap((entry) => {
       const history = (entry.history ?? []).slice().sort((a, b) => +new Date(b.date) - +new Date(a.date));
@@ -438,13 +466,17 @@ function buildFallbackInsights(entries: Entry[], projects: ProjectIntelligence[]
     tracked_usage_count: uniqueTracked,
     uncharted_usage_count: uniqueUncharted,
     active_drift_count: topDrift.length,
-    recent_decision_count: recentMoves.length
+    recent_decision_count: recentMoves.length,
+    ai_mcp_project_count: aiMcpProjectCount,
+    ai_mcp_uncharted_count: new Set(topAIMCPUncharted.map((item) => item.name.toLowerCase())).size
   };
 
   return {
     topUncharted,
     topAdopted,
     topDrift,
+    topAIMCPUncharted,
+    topAIMCPTracked,
     topTags,
     quadrantBreakdown,
     ringBreakdown,
@@ -452,6 +484,29 @@ function buildFallbackInsights(entries: Entry[], projects: ProjectIntelligence[]
     recentMoves,
     summary
   };
+}
+
+function isAIMCPSignal(name: string, source = ''): boolean {
+  const haystack = `${name} ${source}`.toLowerCase();
+  return [
+    'mcp',
+    'model context protocol',
+    'modelcontextprotocol',
+    'openai',
+    'anthropic',
+    'claude',
+    'langchain',
+    'langgraph',
+    'llamaindex',
+    'llama-index',
+    'ollama',
+    'vllm',
+    'promptfoo',
+    'litellm',
+    'autogen',
+    'crewai',
+    'dspy'
+  ].some((keyword) => haystack.includes(keyword));
 }
 
 function mergeProjectHealth(project: Project, computed?: ProjectIntelligence, apiHealth?: ProjectHealth): ProjectIntelligence {

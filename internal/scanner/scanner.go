@@ -29,6 +29,7 @@ func (s *Scanner) Scan(root string) (*types.ScanResult, error) {
 		Technologies: []types.DiscoveredTech{},
 		Files:        make(map[string][]string),
 	}
+	seenTechs := make(map[string]bool)
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -70,14 +71,16 @@ func (s *Scanner) Scan(root string) (*types.ScanResult, error) {
 			relPath, _ := filepath.Rel(root, path)
 			var techNames []string
 			for _, t := range techs {
-				techNames = append(techNames, t.Name)
-				// Check mappings for quadrant hint
-				if hint, ok := s.config.Mappings[strings.ToLower(t.Name)]; ok {
-					t.Quadrant = hint.Quadrant
-					if t.Name != hint.Name {
-						t.Name = hint.Name // Use canonical name
-					}
+				t = s.normalizeTech(t)
+				if t.Name == "" {
+					continue
 				}
+				techNames = appendIfMissing(techNames, t.Name)
+				key := strings.ToLower(t.Name)
+				if seenTechs[key] {
+					continue
+				}
+				seenTechs[key] = true
 				result.Technologies = append(result.Technologies, t)
 			}
 			result.Files[relPath] = techNames
@@ -101,8 +104,21 @@ func (s *Scanner) parseFile(path, filename string) ([]types.DiscoveredTech, erro
 		return s.parseCargoToml(path)
 	case "pyproject.toml":
 		return s.parsePyprojectToml(path)
+	case ".mcp.json", "mcp.json", "claude_desktop_config.json", "cline_mcp_settings.json":
+		return s.parseMCPConfigJSON(path, filename)
 	}
 	return nil, nil
+}
+
+func (s *Scanner) normalizeTech(tech types.DiscoveredTech) types.DiscoveredTech {
+	if hint, ok := s.config.Mappings[strings.ToLower(strings.TrimSpace(tech.Name))]; ok {
+		tech.Quadrant = hint.Quadrant
+		if hint.Name != "" {
+			tech.Name = hint.Name
+		}
+	}
+
+	return tech
 }
 
 func (s *Scanner) parsePackageJSON(path string) ([]types.DiscoveredTech, error) {
@@ -340,4 +356,143 @@ func (s *Scanner) parsePyprojectToml(path string) ([]types.DiscoveredTech, error
 	}
 
 	return techs, nil
+}
+
+func (s *Scanner) parseMCPConfigJSON(path, filename string) ([]types.DiscoveredTech, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	type mcpServerConfig struct {
+		Command string   `json:"command"`
+		Args    []string `json:"args"`
+		URL     string   `json:"url"`
+	}
+
+	type mcpConfig struct {
+		MCPServers map[string]mcpServerConfig `json:"mcpServers"`
+		Servers    map[string]mcpServerConfig `json:"servers"`
+	}
+
+	var config mcpConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+
+	servers := config.MCPServers
+	if len(servers) == 0 {
+		servers = config.Servers
+	}
+	if len(servers) == 0 {
+		var rootServers map[string]mcpServerConfig
+		if err := json.Unmarshal(data, &rootServers); err == nil {
+			servers = rootServers
+		}
+	}
+	if len(servers) == 0 {
+		return nil, nil
+	}
+
+	techs := []types.DiscoveredTech{
+		{
+			Name:     "Model Context Protocol",
+			Source:   filename,
+			Quadrant: types.QuadrantTools,
+		},
+	}
+
+	for _, server := range servers {
+		for _, candidate := range extractMCPPackages(server.Command, server.Args, server.URL) {
+			appendUniqueTech(&techs, types.DiscoveredTech{
+				Name:   candidate,
+				Source: filename,
+			})
+		}
+	}
+
+	return techs, nil
+}
+
+func extractMCPPackages(command string, args []string, url string) []string {
+	tokens := append([]string{command}, args...)
+	var packages []string
+
+	for idx, token := range tokens {
+		if token == "-m" && idx+1 < len(tokens) {
+			appendUniqueString(&packages, strings.TrimSpace(tokens[idx+1]))
+			continue
+		}
+
+		if candidate := mcpCandidateFromToken(token); candidate != "" {
+			appendUniqueString(&packages, candidate)
+		}
+	}
+
+	if candidate := mcpCandidateFromToken(url); candidate != "" {
+		appendUniqueString(&packages, candidate)
+	}
+
+	return packages
+}
+
+func mcpCandidateFromToken(token string) string {
+	trimmed := strings.Trim(strings.TrimSpace(token), `"'`)
+	if trimmed == "" || strings.HasPrefix(trimmed, "-") {
+		return ""
+	}
+
+	lower := strings.ToLower(trimmed)
+	switch lower {
+	case "npx", "pnpm", "pnpx", "yarn", "bunx", "uv", "uvx", "python", "python3", "node", "docker", "go":
+		return ""
+	}
+
+	keywords := []string{
+		"mcp",
+		"modelcontextprotocol",
+		"openai",
+		"anthropic",
+		"langchain",
+		"langgraph",
+		"ollama",
+		"vllm",
+		"promptfoo",
+		"litellm",
+		"llamaindex",
+		"llama-index",
+		"autogen",
+		"crewai",
+		"dspy",
+	}
+	for _, keyword := range keywords {
+		if strings.Contains(lower, keyword) {
+			return trimmed
+		}
+	}
+
+	return ""
+}
+
+func appendUniqueTech(techs *[]types.DiscoveredTech, tech types.DiscoveredTech) {
+	key := strings.ToLower(strings.TrimSpace(tech.Name))
+	for _, existing := range *techs {
+		if strings.ToLower(strings.TrimSpace(existing.Name)) == key {
+			return
+		}
+	}
+	*techs = append(*techs, tech)
+}
+
+func appendIfMissing(values []string, value string) []string {
+	for _, existing := range values {
+		if strings.EqualFold(existing, value) {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func appendUniqueString(values *[]string, value string) {
+	*values = appendIfMissing(*values, value)
 }

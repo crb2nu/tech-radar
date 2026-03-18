@@ -89,3 +89,63 @@ func TestBuildInsights(t *testing.T) {
 		t.Fatalf("expected beta risk level to be critical, got %s", insights.ProjectHealth[0].RiskLevel)
 	}
 }
+
+func TestBuildInsightsAIMCPSignals(t *testing.T) {
+	now := time.Date(2026, 3, 18, 12, 0, 0, 0, time.UTC)
+
+	radar := &types.Radar{
+		Entries: []types.Entry{
+			{
+				Name:       "Claude API",
+				Quadrant:   types.QuadrantPlatforms,
+				Ring:       types.RingTrial,
+				ProjectIDs: []string{"alpha"},
+			},
+			{
+				Name:       "Model Context Protocol",
+				Quadrant:   types.QuadrantTools,
+				Ring:       types.RingAssess,
+				ProjectIDs: []string{"alpha", "beta"},
+			},
+		},
+	}
+
+	projects := []types.Project{
+		{
+			ID:       "1",
+			Name:     "alpha",
+			LastScan: now,
+			Technologies: []types.DiscoveredTech{
+				{Name: "Claude API", Source: "package.json"},
+				{Name: "Model Context Protocol", Source: ".mcp.json"},
+				{Name: "LangChain", Source: "pyproject.toml"},
+			},
+		},
+		{
+			ID:       "2",
+			Name:     "beta",
+			LastScan: now,
+			Technologies: []types.DiscoveredTech{
+				{Name: "Model Context Protocol", Source: "mcp.json"},
+			},
+		},
+	}
+
+	insights := buildInsights(radar, projects)
+
+	if insights.Summary.AIMCPProjectCount != 2 {
+		t.Fatalf("expected 2 AI/MCP projects, got %d", insights.Summary.AIMCPProjectCount)
+	}
+
+	if insights.Summary.AIMCPUnchartedCount != 1 {
+		t.Fatalf("expected 1 AI/MCP uncharted signal, got %d", insights.Summary.AIMCPUnchartedCount)
+	}
+
+	if len(insights.TopAIMCPUncharted) != 1 || insights.TopAIMCPUncharted[0].Name != "LangChain" {
+		t.Fatalf("expected LangChain as top AI/MCP uncharted signal, got %#v", insights.TopAIMCPUncharted)
+	}
+
+	if len(insights.TopAIMCPTracked) == 0 || insights.TopAIMCPTracked[0].Name != "Model Context Protocol" {
+		t.Fatalf("expected Model Context Protocol as a tracked AI/MCP signal, got %#v", insights.TopAIMCPTracked)
+	}
+}

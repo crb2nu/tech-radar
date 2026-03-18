@@ -98,3 +98,74 @@ numpy
 		}
 	}
 }
+
+func TestScanner_ScanMCPConfig(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "scanner_mcp_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	packageJSON := `{
+		"dependencies": {
+			"openai": "^4.90.0"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tempDir, "package.json"), []byte(packageJSON), 0644); err != nil {
+		t.Fatalf("Failed to write package.json: %v", err)
+	}
+
+	mcpConfig := `{
+		"mcpServers": {
+			"filesystem": {
+				"command": "npx",
+				"args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+			},
+			"fetch": {
+				"command": "uvx",
+				"args": ["mcp-server-fetch"]
+			}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tempDir, ".mcp.json"), []byte(mcpConfig), 0644); err != nil {
+		t.Fatalf("Failed to write .mcp.json: %v", err)
+	}
+
+	config := types.ScanConfig{
+		Files: []string{"package.json", ".mcp.json"},
+		Mappings: map[string]types.EntryHint{
+			"openai": {Name: "OpenAI API", Quadrant: types.QuadrantPlatforms},
+			"@modelcontextprotocol/server-filesystem": {Name: "Filesystem MCP Server", Quadrant: types.QuadrantTools},
+			"mcp-server-fetch":                        {Name: "Fetch MCP Server", Quadrant: types.QuadrantTools},
+		},
+	}
+
+	scanner := New(config)
+	result, err := scanner.Scan(tempDir)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	expected := map[string]types.Quadrant{
+		"OpenAI API":             types.QuadrantPlatforms,
+		"Model Context Protocol": types.QuadrantTools,
+		"Filesystem MCP Server":  types.QuadrantTools,
+		"Fetch MCP Server":       types.QuadrantTools,
+	}
+
+	for name, quadrant := range expected {
+		found := false
+		for _, tech := range result.Technologies {
+			if tech.Name != name {
+				continue
+			}
+			found = true
+			if tech.Quadrant != quadrant {
+				t.Fatalf("expected %s quadrant to be %s, got %s", name, quadrant, tech.Quadrant)
+			}
+		}
+		if !found {
+			t.Fatalf("expected to find technology %s, got %#v", name, result.Technologies)
+		}
+	}
+}
