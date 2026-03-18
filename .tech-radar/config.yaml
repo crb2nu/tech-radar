@@ -19,9 +19,18 @@ scan:
         openai:
             name: OpenAI API
             quadrant: platforms
+        anthropic:
+            name: Claude API
+            quadrant: platforms
         '@anthropic-ai/sdk':
             name: Claude API
             quadrant: platforms
+        mcp:
+            name: Model Context Protocol
+            quadrant: tools
+        fastmcp:
+            name: FastMCP
+            quadrant: tools
         langchain:
             name: LangChain
             quadrant: frameworks

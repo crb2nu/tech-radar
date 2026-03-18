@@ -395,10 +395,10 @@ func addToRadar(techs []types.DiscoveredTech) error {
 				found = true
 				if tech.EvidencePath != "" && radar.Entries[i].Link == "" {
 					radar.Entries[i].Link = tech.EvidencePath
-					if !containsTag(radar.Entries[i].Tags, "adr") {
+					if tech.Source == "adr" && !containsTag(radar.Entries[i].Tags, "adr") {
 						radar.Entries[i].Tags = append(radar.Entries[i].Tags, "adr")
 					}
-					if tech.EvidenceTitle != "" && radar.Entries[i].Description == "" {
+					if tech.Source == "adr" && tech.EvidenceTitle != "" && radar.Entries[i].Description == "" {
 						radar.Entries[i].Description = fmt.Sprintf("Decision captured in %s", tech.EvidenceTitle)
 					}
 					addedCount++
@@ -452,16 +452,22 @@ func addToRadar(techs []types.DiscoveredTech) error {
 }
 
 func discoveryDescription(tech types.DiscoveredTech) string {
-	if tech.EvidenceTitle != "" {
+	if tech.Source == "adr" && tech.EvidenceTitle != "" {
 		return fmt.Sprintf("Decision captured in %s", tech.EvidenceTitle)
 	}
-	if tech.EvidencePath != "" {
+	if tech.Source == "adr" && tech.EvidencePath != "" {
 		return fmt.Sprintf("Decision captured in %s", tech.EvidencePath)
+	}
+	if tech.EvidencePath != "" {
+		return fmt.Sprintf("Auto-discovered from %s", tech.EvidencePath)
 	}
 	return fmt.Sprintf("Auto-discovered from %s", tech.Source)
 }
 
 func autoTags(tech types.DiscoveredTech) []string {
+	if tech.Source != "adr" {
+		return nil
+	}
 	if tech.EvidencePath == "" {
 		return nil
 	}

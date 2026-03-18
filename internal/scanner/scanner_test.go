@@ -214,3 +214,126 @@ We are standardizing on React and TypeScript for the frontend stack.
 		}
 	}
 }
+
+func TestScanner_ScanHiddenMCPConfigDir(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "scanner_hidden_mcp_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	cursorDir := filepath.Join(tempDir, ".cursor")
+	if err := os.MkdirAll(cursorDir, 0755); err != nil {
+		t.Fatalf("Failed to create hidden MCP config dir: %v", err)
+	}
+
+	mcpConfig := `{
+		"mcpServers": {
+			"filesystem": {
+				"command": "npx",
+				"args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+			}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(cursorDir, "mcp.json"), []byte(mcpConfig), 0644); err != nil {
+		t.Fatalf("Failed to write hidden-dir mcp.json: %v", err)
+	}
+
+	config := types.ScanConfig{
+		Files: []string{"mcp.json"},
+		Mappings: map[string]types.EntryHint{
+			"@modelcontextprotocol/server-filesystem": {Name: "Filesystem MCP Server", Quadrant: types.QuadrantTools},
+		},
+	}
+
+	scanner := New(config)
+	result, err := scanner.Scan(tempDir)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	expectedPath := ".cursor/mcp.json"
+	foundProtocol := false
+	foundFilesystem := false
+	for _, tech := range result.Technologies {
+		switch tech.Name {
+		case "Model Context Protocol":
+			foundProtocol = true
+			if tech.Source != "mcp.json" {
+				t.Fatalf("expected hidden-dir MCP source to stay mcp.json, got %s", tech.Source)
+			}
+			if tech.EvidencePath != expectedPath {
+				t.Fatalf("expected evidence path %s, got %s", expectedPath, tech.EvidencePath)
+			}
+		case "Filesystem MCP Server":
+			foundFilesystem = true
+			if tech.Quadrant != types.QuadrantTools {
+				t.Fatalf("expected Filesystem MCP Server quadrant to be tools, got %s", tech.Quadrant)
+			}
+			if tech.EvidencePath != expectedPath {
+				t.Fatalf("expected evidence path %s, got %s", expectedPath, tech.EvidencePath)
+			}
+		}
+	}
+
+	if !foundProtocol || !foundFilesystem {
+		t.Fatalf("expected hidden MCP config discoveries, got %#v", result.Technologies)
+	}
+}
+
+func TestScanner_ScanPythonMCPSDKMappings(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "scanner_python_mcp_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	pyproject := `
+[project]
+dependencies = [
+	"mcp>=1.6.0",
+	"fastmcp==2.0.0",
+	"anthropic>=0.49.0",
+]
+`
+	if err := os.WriteFile(filepath.Join(tempDir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatalf("Failed to write pyproject.toml: %v", err)
+	}
+
+	config := types.ScanConfig{
+		Files: []string{"pyproject.toml"},
+		Mappings: map[string]types.EntryHint{
+			"mcp":       {Name: "Model Context Protocol", Quadrant: types.QuadrantTools},
+			"fastmcp":   {Name: "FastMCP", Quadrant: types.QuadrantTools},
+			"anthropic": {Name: "Claude API", Quadrant: types.QuadrantPlatforms},
+		},
+	}
+
+	scanner := New(config)
+	result, err := scanner.Scan(tempDir)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	expected := map[string]types.Quadrant{
+		"Model Context Protocol": types.QuadrantTools,
+		"FastMCP":                types.QuadrantTools,
+		"Claude API":             types.QuadrantPlatforms,
+	}
+
+	for name, quadrant := range expected {
+		found := false
+		for _, tech := range result.Technologies {
+			if tech.Name != name {
+				continue
+			}
+			found = true
+			if tech.Quadrant != quadrant {
+				t.Fatalf("expected %s quadrant to be %s, got %s", name, quadrant, tech.Quadrant)
+			}
+		}
+		if !found {
+			t.Fatalf("expected to find normalized technology %s, got %#v", name, result.Technologies)
+		}
+	}
+}

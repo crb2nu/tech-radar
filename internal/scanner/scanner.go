@@ -38,7 +38,7 @@ func (s *Scanner) Scan(root string) (*types.ScanResult, error) {
 		}
 
 		if d.IsDir() {
-			if strings.HasPrefix(d.Name(), ".") && d.Name() != "." && d.Name() != ".." {
+			if shouldSkipDir(d.Name()) {
 				return filepath.SkipDir
 			}
 			if d.Name() == "node_modules" || d.Name() == "vendor" {
@@ -87,6 +87,19 @@ func (s *Scanner) Scan(root string) (*types.ScanResult, error) {
 	})
 
 	return result, err
+}
+
+func shouldSkipDir(name string) bool {
+	if !strings.HasPrefix(name, ".") || name == "." || name == ".." {
+		return false
+	}
+
+	switch name {
+	case ".claude", ".continue", ".cursor", ".roo", ".vscode", ".windsurf":
+		return false
+	default:
+		return true
+	}
 }
 
 func (s *Scanner) shouldScanPath(path, filename string) bool {
@@ -508,17 +521,19 @@ func (s *Scanner) parseMCPConfigJSON(path, filename string) ([]types.DiscoveredT
 
 	techs := []types.DiscoveredTech{
 		{
-			Name:     "Model Context Protocol",
-			Source:   filename,
-			Quadrant: types.QuadrantTools,
+			Name:         "Model Context Protocol",
+			Source:       filename,
+			Quadrant:     types.QuadrantTools,
+			EvidencePath: path,
 		},
 	}
 
 	for _, server := range servers {
 		for _, candidate := range extractMCPPackages(server.Command, server.Args, server.URL) {
 			appendUniqueTech(&techs, types.DiscoveredTech{
-				Name:   candidate,
-				Source: filename,
+				Name:         candidate,
+				Source:       filename,
+				EvidencePath: path,
 			})
 		}
 	}

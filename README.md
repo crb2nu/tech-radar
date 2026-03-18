@@ -149,7 +149,10 @@ scan:
     react: { name: React, quadrant: frameworks }
     typescript: { name: TypeScript, quadrant: languages }
     openai: { name: OpenAI API, quadrant: platforms }
+    anthropic: { name: Claude API, quadrant: platforms }
     "@anthropic-ai/sdk": { name: Claude API, quadrant: platforms }
+    mcp: { name: Model Context Protocol, quadrant: tools }
+    fastmcp: { name: FastMCP, quadrant: tools }
     "@modelcontextprotocol/sdk": { name: Model Context Protocol, quadrant: tools }
     "github.com/mark3labs/mcp-go": { name: mcp-go, quadrant: tools }
 
@@ -161,7 +164,7 @@ visualization:
     hold: "#efafa9"
 ```
 
-The scanner now understands common MCP config files as repo-local discovery signals, so AI/agentic tooling can show up in project scans even when it is configured outside a language manifest.
+The scanner now understands common MCP config files as repo-local discovery signals, including configs stored in hidden editor folders such as `.cursor/`, `.vscode/`, `.claude/`, `.continue/`, `.roo/`, and `.windsurf/`, so AI/agentic tooling can show up in project scans even when it is configured outside a language manifest.
 ADR markdown files under common decision directories such as `docs/adrs/`, `docs/adr/`, `adrs/`, and `decisions/` are also scanned automatically. When an ADR mentions a mapped technology, `radar scan --auto-add` can attach that ADR path directly to the resulting radar entry as decision evidence.
 
 ## Architecture
