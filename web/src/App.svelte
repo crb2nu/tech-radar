@@ -6,14 +6,18 @@
     computeDashboardModel,
     formatDate,
     formatRelativeDate,
+    getEntryMotion,
     getBlipPosition,
     isADRReference,
+    motionLabel,
+    motionTone,
     quadrantMeta,
     ringMeta,
     ringOrder,
     uniqueTags,
     type Entry,
     type Insights,
+    type MotionVector,
     type Project,
     type Radar
   } from './lib/dashboard';
@@ -82,6 +86,8 @@
       selectedTag
     })
   );
+  const motionByEntryId = $derived(new Map(dashboard.motionEntries.map((motion) => [motion.entryId, motion])));
+  const selectedEntryMotion = $derived(selectedEntry ? entryMotion(selectedEntry) : null);
 
   const hasActiveFilters = $derived(
     Boolean(searchQuery.trim()) || selectedQuadrant !== 'all' || selectedRing !== 'all' || selectedTag !== 'all'
@@ -164,6 +170,14 @@
   function focusSearch() {
     searchField?.focus();
     searchField?.select();
+  }
+
+  function openEntryById(entryId: string) {
+    selectedEntry = radar?.entries.find((entry) => entry.id === entryId) ?? null;
+  }
+
+  function entryMotion(entry: Entry): MotionVector {
+    return motionByEntryId.get(entry.id) ?? getEntryMotion(entry);
   }
 
   function clearFilters() {
@@ -609,6 +623,35 @@
               <article class="panel">
                 <div class="panel-header">
                   <div>
+                    <span class="eyebrow">Lifecycle motion</span>
+                    <h2>What is heating up and what is cooling down</h2>
+                  </div>
+                  <p>{dashboard.motionEntries.length} entries have enough history to score movement.</p>
+                </div>
+
+                {#if dashboard.motionEntries.length > 0}
+                  <div class="signal-stack">
+                    {#each dashboard.motionEntries.slice(0, 4) as motion}
+                      <button class="signal-row actionable" onclick={() => {
+                        openEntryById(motion.entryId);
+                        activeTab = 'insights';
+                      }}>
+                        <div>
+                          <strong>{motion.name}</strong>
+                          <span>{motion.summary}</span>
+                        </div>
+                        <span class={`signal-pill ${motionTone(motion)}`}>{motionLabel(motion)}</span>
+                      </button>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="empty-card">No entries have enough movement history to score motion yet.</div>
+                {/if}
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
                     <span class="eyebrow">Decision evidence</span>
                     <h2>ADR-backed radar calls</h2>
                   </div>
@@ -738,8 +781,10 @@
 
                     {#each dashboard.renderableEntries as entry, index}
                       {@const pos = getBlipPosition(entry, index)}
+                      {@const motion = entryMotion(entry)}
                       <g
                         class="blip"
+                        data-motion={motion.status}
                         class:hovered={hoveredEntry === entry.name || selectedEntry?.name === entry.name}
                         transform={`translate(${pos.x}, ${pos.y})`}
                         role="button"
@@ -754,12 +799,18 @@
                           }
                         }}
                       >
+                        {#if motion.status === 'accelerating' || motion.status === 'heating' || motion.status === 'cooling'}
+                          <circle r={motion.status === 'accelerating' ? 15 : 13} class={`motion-halo ${motion.status}`}></circle>
+                        {:else if motion.status === 'new'}
+                          <rect x="-12" y="-12" width="24" height="24" rx="7" class="motion-frame"></rect>
+                        {/if}
+
                         {#if entry.moved > 0}
-                          <path d="M 0 -11 L 10 7 L -10 7 Z" fill={ringMeta[entry.ring]?.accent ?? '#1d4ed8'} />
+                          <path class="blip-core" d="M 0 -11 L 10 7 L -10 7 Z" fill={ringMeta[entry.ring]?.accent ?? '#1d4ed8'} />
                         {:else if entry.moved < 0}
-                          <path d="M 0 11 L 10 -7 L -10 -7 Z" fill={ringMeta[entry.ring]?.accent ?? '#b42318'} />
+                          <path class="blip-core" d="M 0 11 L 10 -7 L -10 -7 Z" fill={ringMeta[entry.ring]?.accent ?? '#b42318'} />
                         {:else}
-                          <circle r="8" fill={ringMeta[entry.ring]?.accent ?? '#1d4ed8'} />
+                          <circle class="blip-core" r="8" fill={ringMeta[entry.ring]?.accent ?? '#1d4ed8'} />
                         {/if}
 
                         {#if (entry.project_ids?.length ?? 0) > 0}
@@ -792,6 +843,10 @@
                       </div>
                     </div>
                   {/each}
+                </div>
+
+                <div class="legend-note">
+                  Motion halos spotlight lifecycle change: teal means a technology is heating up, amber frames mark new arrivals, and dashed red halos flag cooling decisions.
                 </div>
 
                 {#if dashboard.offCanvasEntries.length > 0}
@@ -831,15 +886,22 @@
                       {#if section.entries.length > 0}
                         <div class="entry-list">
                           {#each section.entries as entry}
+                            {@const motion = entryMotion(entry)}
                             <button class="entry-card" onclick={() => selectedEntry = entry}>
                               <div class="entry-card-top">
                                 <strong>{entry.name}</strong>
                                 <span class="entry-meta">{entry.project_ids?.length ?? 0} projects</span>
                               </div>
                               <p>{entry.description}</p>
+                              {#if motion.moveCount > 0}
+                                <p class="entry-note">{motion.summary}</p>
+                              {/if}
                               <div class="chip-row">
                                 <span>{quadrantMeta[entry.quadrant]?.label ?? entry.quadrant}</span>
                                 <span>{movementLabel(entry)}</span>
+                                {#if motion.moveCount > 0}
+                                  <span>{motionLabel(motion)}</span>
+                                {/if}
                                 {#if entry.tags?.[0]}
                                   <span>#{entry.tags[0]}</span>
                                 {/if}
@@ -1060,6 +1122,55 @@
               <article class="panel">
                 <div class="panel-header">
                   <div>
+                    <span class="eyebrow">Lifecycle vectors</span>
+                    <h2>Momentum behind each decision</h2>
+                  </div>
+                </div>
+
+                <div class="split-grid motion-split">
+                  <section>
+                    <h3>Heating up</h3>
+                    {#if dashboard.heatingUpEntries.length > 0}
+                      <div class="signal-stack">
+                        {#each dashboard.heatingUpEntries as motion}
+                          <button class="signal-row actionable" onclick={() => openEntryById(motion.entryId)}>
+                            <div>
+                              <strong>{motion.name}</strong>
+                              <span>{motion.summary}</span>
+                            </div>
+                            <span class={`signal-pill ${motionTone(motion)}`}>{motionLabel(motion)}</span>
+                          </button>
+                        {/each}
+                      </div>
+                    {:else}
+                      <div class="empty-card">No technologies are showing upward motion beyond the current baseline.</div>
+                    {/if}
+                  </section>
+
+                  <section>
+                    <h3>Cooling down</h3>
+                    {#if dashboard.coolingEntries.length > 0}
+                      <div class="signal-stack">
+                        {#each dashboard.coolingEntries as motion}
+                          <button class="signal-row actionable" onclick={() => openEntryById(motion.entryId)}>
+                            <div>
+                              <strong>{motion.name}</strong>
+                              <span>{motion.summary}</span>
+                            </div>
+                            <span class={`signal-pill ${motionTone(motion)}`}>{motionLabel(motion)}</span>
+                          </button>
+                        {/each}
+                      </div>
+                    {:else}
+                      <div class="empty-card">No cooling technologies are currently standing out.</div>
+                    {/if}
+                  </section>
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
                     <span class="eyebrow">Governance tempo</span>
                     <h2>Recent ring changes</h2>
                   </div>
@@ -1189,10 +1300,27 @@
 
             <div class="chip-row">
               <span>{movementLabel(selectedEntry)}</span>
+              {#if selectedEntryMotion && selectedEntryMotion.moveCount > 0}
+                <span>{motionLabel(selectedEntryMotion)}</span>
+              {/if}
               {#each selectedEntry.tags ?? [] as tag}
                 <span>#{tag}</span>
               {/each}
             </div>
+
+            {#if selectedEntryMotion && selectedEntryMotion.moveCount > 0}
+              <div class="motion-callout" data-tone={motionTone(selectedEntryMotion)}>
+                <div class="motion-callout-header">
+                  <span class={`signal-pill ${motionTone(selectedEntryMotion)}`}>{motionLabel(selectedEntryMotion)}</span>
+                  <strong>{selectedEntryMotion.summary}</strong>
+                </div>
+                <div class="chip-row">
+                  <span>{selectedEntryMotion.moveCount} checkpoints</span>
+                  <span>{selectedEntryMotion.recentMoveCount} in 180 days</span>
+                  <span>{selectedEntryMotion.streak}-step streak</span>
+                </div>
+              </div>
+            {/if}
 
             {#if selectedEntry.link}
               {#if isADRReference(selectedEntry.link)}
@@ -1885,6 +2013,11 @@
     color: var(--good);
   }
 
+  .signal-pill.neutral {
+    background: rgba(29, 78, 216, 0.1);
+    color: var(--accent);
+  }
+
   .signal-pill.watch,
   .risk-badge.watch {
     background: rgba(201, 122, 16, 0.14);
@@ -2105,14 +2238,37 @@
   }
 
   .blip path,
-  .blip circle {
+  .blip circle,
+  .blip rect {
     transition: transform 150ms ease, filter 150ms ease;
   }
 
-  .blip.hovered path,
-  .blip.hovered circle:first-child {
+  .blip.hovered .blip-core {
     filter: drop-shadow(0 10px 10px rgba(29, 78, 216, 0.26));
     transform: scale(1.12);
+  }
+
+  .motion-halo,
+  .motion-frame {
+    fill: none;
+    stroke-width: 2;
+    pointer-events: none;
+  }
+
+  .motion-halo.accelerating,
+  .motion-halo.heating {
+    stroke: rgba(11, 143, 93, 0.78);
+    filter: drop-shadow(0 0 12px rgba(11, 143, 93, 0.3));
+  }
+
+  .motion-halo.cooling {
+    stroke: rgba(180, 35, 24, 0.7);
+    stroke-dasharray: 4 5;
+  }
+
+  .motion-frame {
+    stroke: rgba(201, 122, 16, 0.78);
+    stroke-dasharray: 3 3;
   }
 
   .project-count-dot {
@@ -2165,6 +2321,14 @@
     margin: 0.3rem 0 0;
     color: var(--muted);
     line-height: 1.5;
+  }
+
+  .entry-note,
+  .legend-note {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.55;
+    font-size: 0.9rem;
   }
 
   .ring-section-grid {
@@ -2317,6 +2481,38 @@
     background: rgba(255, 255, 255, 0.64);
   }
 
+  .motion-callout {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.72);
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .motion-callout[data-tone="good"] {
+    border-color: rgba(11, 143, 93, 0.2);
+    background: rgba(11, 143, 93, 0.06);
+  }
+
+  .motion-callout[data-tone="danger"] {
+    border-color: rgba(180, 35, 24, 0.18);
+    background: rgba(180, 35, 24, 0.06);
+  }
+
+  .motion-callout[data-tone="watch"] {
+    border-color: rgba(201, 122, 16, 0.22);
+    background: rgba(201, 122, 16, 0.08);
+  }
+
+  .motion-callout-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.85rem;
+  }
+
   .text-link {
     color: var(--accent);
     font-weight: 600;
@@ -2327,6 +2523,11 @@
     display: grid;
     gap: 1rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .motion-split section {
+    display: grid;
+    gap: 0.8rem;
   }
 
   .form-error {

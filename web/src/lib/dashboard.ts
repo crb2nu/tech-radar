@@ -125,6 +125,25 @@ export interface SummaryMetric {
   tone: 'good' | 'watch' | 'danger' | 'neutral';
 }
 
+export type MotionStatus = 'accelerating' | 'heating' | 'cooling' | 'new' | 'steady';
+
+export interface MotionVector {
+  entryId: string;
+  name: string;
+  status: MotionStatus;
+  direction: 'up' | 'down' | 'flat';
+  score: number;
+  moveCount: number;
+  recentMoveCount: number;
+  netRingDelta: number;
+  streak: number;
+  latestDate?: string;
+  latestRing: string;
+  previousRing?: string;
+  projectCount: number;
+  summary: string;
+}
+
 export interface RadarSection {
   ring: string;
   label: string;
@@ -149,6 +168,9 @@ export interface DashboardModel {
   aiMcpAdoptionLeaders: UsageStat[];
   aiMcpProjectCount: number;
   adrEntries: Entry[];
+  motionEntries: MotionVector[];
+  heatingUpEntries: MotionVector[];
+  coolingEntries: MotionVector[];
   recentMoves: RecentMove[];
   quadrantBreakdown: LabelStat[];
   ringBreakdown: LabelStat[];
@@ -279,6 +301,15 @@ export function computeDashboardModel(
   const adrEntries = filteredEntries
     .filter((entry) => isADRReference(entry.link))
     .sort((a, b) => (b.history?.length ?? 0) - (a.history?.length ?? 0) || a.name.localeCompare(b.name));
+  const motionEntries = filteredEntries
+    .map((entry) => getEntryMotion(entry))
+    .filter((motion) => motion.moveCount > 0)
+    .sort(compareMotionVectors);
+  const activeMotionEntries = motionEntries.filter((motion) => motion.status !== 'steady');
+  const heatingUpEntries = activeMotionEntries.filter((motion) =>
+    motion.status === 'accelerating' || motion.status === 'heating' || motion.status === 'new'
+  );
+  const coolingEntries = activeMotionEntries.filter((motion) => motion.status === 'cooling');
   const recentMoves = insights?.recent_moves?.length ? insights.recent_moves : fallbackInsights.recentMoves;
   const quadrantBreakdown = insights?.quadrant_breakdown?.length ? insights.quadrant_breakdown : fallbackInsights.quadrantBreakdown;
   const ringBreakdown = insights?.ring_breakdown?.length ? insights.ring_breakdown : fallbackInsights.ringBreakdown;
@@ -326,6 +357,14 @@ export function computeDashboardModel(
       tone: summary.recent_decision_count > 0 ? 'neutral' : 'watch'
     },
     {
+      label: 'Motion vectors',
+      value: `${activeMotionEntries.length}`,
+      caption: activeMotionEntries[0]
+        ? `${activeMotionEntries[0].name} is ${motionLabel(activeMotionEntries[0]).toLowerCase()}`
+        : 'No active lifecycle shifts are standing out yet',
+      tone: activeMotionEntries.length > 0 ? motionTone(activeMotionEntries[0]) : 'watch'
+    },
+    {
       label: 'AI / MCP frontier',
       value: `${summary.ai_mcp_uncharted_count}`,
       caption: `${aiMcpProjectCount} projects already show agentic tooling signals`,
@@ -356,6 +395,9 @@ export function computeDashboardModel(
     aiMcpAdoptionLeaders,
     aiMcpProjectCount,
     adrEntries,
+    motionEntries,
+    heatingUpEntries,
+    coolingEntries,
     recentMoves,
     quadrantBreakdown,
     ringBreakdown,
@@ -418,6 +460,125 @@ export function isADRReference(link?: string): boolean {
   if (!link) return false;
   const normalized = link.toLowerCase();
   return normalized.endsWith('.md') || normalized.includes('/adr') || normalized.includes('/adrs');
+}
+
+export function getEntryMotion(entry: Entry, now = new Date()): MotionVector {
+  const history = (entry.history ?? [])
+    .filter((item) => !Number.isNaN(new Date(item.date).getTime()))
+    .slice()
+    .sort((a, b) => +new Date(b.date) - +new Date(a.date));
+
+  const latestRing = history[0]?.ring ?? entry.ring;
+  if (history.length === 0) {
+    return {
+      entryId: entry.id,
+      name: entry.name,
+      status: 'steady',
+      direction: 'flat',
+      score: 0,
+      moveCount: 0,
+      recentMoveCount: 0,
+      netRingDelta: 0,
+      streak: 0,
+      latestRing,
+      projectCount: entry.project_ids?.length ?? 0,
+      summary: 'No governance history has been recorded yet.'
+    };
+  }
+
+  const latest = history[0];
+  const previous = history[1];
+  const latestDate = new Date(latest.date);
+  const daysSinceLatest = differenceInDays(now, latestDate);
+  const recentMoveCount = history.filter((item) => differenceInDays(now, new Date(item.date)) <= 180).length;
+  const latestRank = ringWeight(latest.ring);
+  const previousRank = previous ? ringWeight(previous.ring) : latestRank;
+  const oldestRank = ringWeight(history[history.length - 1]?.ring ?? latest.ring);
+  const latestDelta = latestRank - previousRank;
+  const netRingDelta = latestRank - oldestRank;
+  const streak = previous ? movementStreak(history) : 1;
+
+  let status: MotionStatus = 'steady';
+  let direction: MotionVector['direction'] = 'flat';
+
+  if (history.length === 1) {
+    status = daysSinceLatest <= 120 ? 'new' : 'steady';
+  } else if (latestDelta > 0) {
+    direction = 'up';
+    status = recentMoveCount >= 3 || streak >= 2 ? 'accelerating' : 'heating';
+  } else if (latestDelta < 0) {
+    direction = 'down';
+    status = 'cooling';
+  } else if (netRingDelta > 0) {
+    direction = 'up';
+    status = 'heating';
+  } else if (netRingDelta < 0) {
+    direction = 'down';
+    status = 'cooling';
+  }
+
+  const recencyBoost = Math.max(0, 90 - daysSinceLatest);
+  const score = Math.max(
+    0,
+    recentMoveCount * 14 +
+      Math.abs(latestDelta) * 24 +
+      Math.abs(netRingDelta) * 10 +
+      streak * 8 +
+      Math.round(recencyBoost / 3) +
+      (entry.project_ids?.length ?? 0) * 2
+  );
+
+  return {
+    entryId: entry.id,
+    name: entry.name,
+    status,
+    direction,
+    score,
+    moveCount: history.length,
+    recentMoveCount,
+    netRingDelta,
+    streak,
+    latestDate: latest.date,
+    latestRing,
+    previousRing: previous?.ring,
+    projectCount: entry.project_ids?.length ?? 0,
+    summary: describeMotion(status, {
+      latestRing,
+      previousRing: previous?.ring,
+      recentMoveCount,
+      streak,
+      daysSinceLatest
+    })
+  };
+}
+
+export function motionLabel(motion: MotionVector): string {
+  switch (motion.status) {
+    case 'accelerating':
+      return 'Accelerating';
+    case 'heating':
+      return 'Heating up';
+    case 'cooling':
+      return 'Cooling down';
+    case 'new':
+      return 'Newly added';
+    default:
+      return 'Steady';
+  }
+}
+
+export function motionTone(motion: MotionVector): SummaryMetric['tone'] {
+  switch (motion.status) {
+    case 'accelerating':
+    case 'heating':
+      return 'good';
+    case 'cooling':
+      return 'danger';
+    case 'new':
+      return 'watch';
+    default:
+      return 'neutral';
+  }
 }
 
 function buildFallbackInsights(entries: Entry[], projects: ProjectIntelligence[]) {
@@ -626,4 +787,99 @@ function toLabelStats(values: Record<string, number>): LabelStat[] {
     .filter(([label, count]) => !!label && count > 0)
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+function compareMotionVectors(a: MotionVector, b: MotionVector): number {
+  if (a.score === b.score) {
+    return a.name.localeCompare(b.name);
+  }
+  return b.score - a.score;
+}
+
+function ringWeight(ring?: string): number {
+  switch (ring) {
+    case 'adopt':
+      return 4;
+    case 'trial':
+      return 3;
+    case 'assess':
+      return 2;
+    case 'hold':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function movementStreak(history: HistoryEntry[]): number {
+  let streak = 0;
+  let direction = 0;
+
+  for (let index = 0; index < history.length - 1; index += 1) {
+    const delta = ringWeight(history[index].ring) - ringWeight(history[index + 1].ring);
+    if (delta === 0) {
+      break;
+    }
+
+    const sign = Math.sign(delta);
+    if (direction === 0) {
+      direction = sign;
+      streak = 1;
+      continue;
+    }
+    if (sign !== direction) {
+      break;
+    }
+    streak += 1;
+  }
+
+  return streak;
+}
+
+function differenceInDays(left: Date, right: Date): number {
+  return Math.max(0, Math.round((left.getTime() - right.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+function describeMotion(
+  status: MotionStatus,
+  detail: {
+    latestRing: string;
+    previousRing?: string;
+    recentMoveCount: number;
+    streak: number;
+    daysSinceLatest: number;
+  }
+): string {
+  const latest = detail.latestRing.toUpperCase();
+  const previous = detail.previousRing?.toUpperCase();
+
+  switch (status) {
+    case 'accelerating':
+      return previous
+        ? `Accelerating from ${previous} to ${latest} with a ${detail.streak}-step upward streak and ${detail.recentMoveCount} checkpoints in 180 days.`
+        : `Accelerating into ${latest} with repeated governance movement in the last 180 days.`;
+    case 'heating':
+      return previous
+        ? `Heating up from ${previous} to ${latest} with fresh supporting evidence in the last 180 days.`
+        : `Heating up in ${latest} with new governance activity.`;
+    case 'cooling':
+      return previous
+        ? `Cooling down from ${previous} to ${latest} after a recent downgrade signal.`
+        : `Cooling down in ${latest} with a recent negative movement signal.`;
+    case 'new':
+      return `Newly added to ${latest} ${relativeDaysLabel(detail.daysSinceLatest)}.`;
+    default:
+      return detail.recentMoveCount > 1
+        ? `Holding steady in ${latest} after ${detail.recentMoveCount} recent governance checkpoints.`
+        : `Holding steady in ${latest}.`;
+  }
+}
+
+function relativeDaysLabel(days: number): string {
+  if (days <= 0) return 'today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${days} days ago`;
+  const months = Math.max(1, Math.round(days / 30));
+  if (months === 1) return '1 month ago';
+  return `${months} months ago`;
 }
