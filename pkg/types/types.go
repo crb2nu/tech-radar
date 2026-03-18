@@ -114,10 +114,12 @@ type ScanResult struct {
 
 // DiscoveredTech represents a technology found during scanning.
 type DiscoveredTech struct {
-	Name     string   `json:"name"`
-	Source   string   `json:"source"` // package.json, go.mod, etc.
-	Version  string   `json:"version,omitempty"`
-	Quadrant Quadrant `json:"quadrant,omitempty"` // If known from mappings
+	Name          string   `json:"name"`
+	Source        string   `json:"source"` // package.json, go.mod, adr, etc.
+	Version       string   `json:"version,omitempty"`
+	Quadrant      Quadrant `json:"quadrant,omitempty"` // If known from mappings
+	EvidencePath  string   `json:"evidence_path,omitempty"`
+	EvidenceTitle string   `json:"evidence_title,omitempty"`
 }
 
 // Insights represents aggregated analytics for the ecosystem.

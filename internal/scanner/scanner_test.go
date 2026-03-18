@@ -9,14 +9,12 @@ import (
 )
 
 func TestScanner_Scan(t *testing.T) {
-	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "scanner_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Create a package.json file
 	packageJSON := `{
 		"dependencies": {
 			"react": "^18.2.0",
@@ -30,7 +28,6 @@ func TestScanner_Scan(t *testing.T) {
 		t.Fatalf("Failed to write package.json: %v", err)
 	}
 
-	// Create a go.mod file
 	goMod := `module example.com/test
 
 go 1.21
@@ -43,7 +40,6 @@ require (
 		t.Fatalf("Failed to write go.mod: %v", err)
 	}
 
-	// Create a requirements.txt file
 	requirementsTxt := `
 flask==3.0.0
 requests>=2.31.0
@@ -53,7 +49,6 @@ numpy
 		t.Fatalf("Failed to write requirements.txt: %v", err)
 	}
 
-	// Create scanner config
 	config := types.ScanConfig{
 		Files: []string{"package.json", "go.mod", "requirements.txt"},
 		Mappings: map[string]types.EntryHint{
@@ -67,9 +62,8 @@ numpy
 		t.Fatalf("Scan failed: %v", err)
 	}
 
-	// Verify results
 	expectedTechs := map[string]bool{
-		"react":                  false,
+		"React":                  false,
 		"axios":                  false,
 		"typescript":             false,
 		"github.com/spf13/cobra": false,
@@ -83,12 +77,8 @@ numpy
 		if _, ok := expectedTechs[tech.Name]; ok {
 			expectedTechs[tech.Name] = true
 		}
-		// Check mapping for React
-		if tech.Name == "React" { // Mapped name
-			expectedTechs["react"] = true
-			if tech.Quadrant != types.QuadrantFrameworks {
-				t.Errorf("Expected React quadrant to be frameworks, got %s", tech.Quadrant)
-			}
+		if tech.Name == "React" && tech.Quadrant != types.QuadrantFrameworks {
+			t.Errorf("Expected React quadrant to be frameworks, got %s", tech.Quadrant)
 		}
 	}
 
@@ -166,6 +156,61 @@ func TestScanner_ScanMCPConfig(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("expected to find technology %s, got %#v", name, result.Technologies)
+		}
+	}
+}
+
+func TestScanner_ScanADRMarkdown(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "scanner_adr_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	adrDir := filepath.Join(tempDir, "docs", "adrs")
+	if err := os.MkdirAll(adrDir, 0755); err != nil {
+		t.Fatalf("Failed to create ADR dir: %v", err)
+	}
+
+	adr := `# ADR-0007 Adopt React and TypeScript
+
+## Status
+Accepted
+
+We are standardizing on React and TypeScript for the frontend stack.
+`
+	adrPath := filepath.Join(adrDir, "0007-adopt-react-typescript.md")
+	if err := os.WriteFile(adrPath, []byte(adr), 0644); err != nil {
+		t.Fatalf("Failed to write ADR: %v", err)
+	}
+
+	config := types.ScanConfig{
+		Mappings: map[string]types.EntryHint{
+			"react":      {Name: "React", Quadrant: types.QuadrantFrameworks},
+			"typescript": {Name: "TypeScript", Quadrant: types.QuadrantLanguages},
+		},
+	}
+
+	scanner := New(config)
+	result, err := scanner.Scan(tempDir)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	if len(result.Technologies) != 2 {
+		t.Fatalf("expected 2 ADR-discovered technologies, got %#v", result.Technologies)
+	}
+
+	expectedPath := "docs/adrs/0007-adopt-react-typescript.md"
+	for _, tech := range result.Technologies {
+		if tech.Source != "adr" {
+			t.Fatalf("expected adr source, got %s", tech.Source)
+		}
+		if tech.EvidencePath != expectedPath {
+			t.Fatalf("expected evidence path %s, got %s", expectedPath, tech.EvidencePath)
+		}
+		if tech.EvidenceTitle != "ADR-0007 Adopt React and TypeScript" {
+			t.Fatalf("unexpected evidence title %q", tech.EvidenceTitle)
 		}
 	}
 }

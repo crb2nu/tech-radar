@@ -390,9 +390,19 @@ func addToRadar(techs []types.DiscoveredTech) error {
 
 	for _, tech := range techs {
 		found := false
-		for _, entry := range radar.Entries {
+		for i, entry := range radar.Entries {
 			if strings.EqualFold(entry.Name, tech.Name) {
 				found = true
+				if tech.EvidencePath != "" && radar.Entries[i].Link == "" {
+					radar.Entries[i].Link = tech.EvidencePath
+					if !containsTag(radar.Entries[i].Tags, "adr") {
+						radar.Entries[i].Tags = append(radar.Entries[i].Tags, "adr")
+					}
+					if tech.EvidenceTitle != "" && radar.Entries[i].Description == "" {
+						radar.Entries[i].Description = fmt.Sprintf("Decision captured in %s", tech.EvidenceTitle)
+					}
+					addedCount++
+				}
 				break
 			}
 		}
@@ -411,13 +421,15 @@ func addToRadar(techs []types.DiscoveredTech) error {
 			Name:        tech.Name,
 			Quadrant:    quadrant,
 			Ring:        types.RingAssess,
-			Description: fmt.Sprintf("Auto-discovered from %s", tech.Source),
+			Description: discoveryDescription(tech),
 			Moved:       0,
+			Link:        tech.EvidencePath,
+			Tags:        autoTags(tech),
 			History: []types.HistoryEntry{
 				{
 					Date:   time.Now(),
 					Ring:   types.RingAssess,
-					Reason: fmt.Sprintf("Auto-discovered from %s", tech.Source),
+					Reason: discoveryDescription(tech),
 				},
 			},
 		}
@@ -437,6 +449,32 @@ func addToRadar(techs []types.DiscoveredTech) error {
 	}
 
 	return nil
+}
+
+func discoveryDescription(tech types.DiscoveredTech) string {
+	if tech.EvidenceTitle != "" {
+		return fmt.Sprintf("Decision captured in %s", tech.EvidenceTitle)
+	}
+	if tech.EvidencePath != "" {
+		return fmt.Sprintf("Decision captured in %s", tech.EvidencePath)
+	}
+	return fmt.Sprintf("Auto-discovered from %s", tech.Source)
+}
+
+func autoTags(tech types.DiscoveredTech) []string {
+	if tech.EvidencePath == "" {
+		return nil
+	}
+	return []string{"adr"}
+}
+
+func containsTag(tags []string, target string) bool {
+	for _, tag := range tags {
+		if strings.EqualFold(tag, target) {
+			return true
+		}
+	}
+	return false
 }
 
 func loadRadar() (*types.Radar, error) {
