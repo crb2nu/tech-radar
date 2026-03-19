@@ -232,7 +232,11 @@ func TestScanner_ScanHiddenMCPConfigDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	})
 
 	cursorDir := filepath.Join(tempDir, ".cursor")
 	if err := os.MkdirAll(cursorDir, 0755); err != nil {
@@ -298,7 +302,11 @@ func TestScanner_ScanPythonMCPSDKMappings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	})
 
 	pyproject := `
 [project]
