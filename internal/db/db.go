@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"log"
 
 	"github.com/lib/pq"
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
@@ -50,7 +52,7 @@ func (d *DB) GetRadar(id string) (*types.Radar, error) {
 	}
 	radar.Meta.Version = version.String
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("radar not found: %s", id)
 	}
 	if err != nil {
@@ -65,7 +67,7 @@ func (d *DB) GetRadar(id string) (*types.Radar, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer closeRows(rows)
 
 	for rows.Next() {
 		var e types.Entry
@@ -86,7 +88,7 @@ func (d *DB) GetRadar(id string) (*types.Radar, error) {
 					e.History = append(e.History, h)
 				}
 			}
-			hRows.Close()
+			closeRows(hRows)
 		}
 
 		// Fetch projects using this tech
@@ -102,7 +104,7 @@ func (d *DB) GetRadar(id string) (*types.Radar, error) {
 					e.ProjectIDs = append(e.ProjectIDs, pName)
 				}
 			}
-			pRows.Close()
+			closeRows(pRows)
 		}
 
 		radar.Entries = append(radar.Entries, e)
@@ -117,7 +119,7 @@ func (d *DB) GetProjects() ([]types.Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer closeRows(rows)
 
 	var projects []types.Project
 	for rows.Next() {
@@ -128,16 +130,28 @@ func (d *DB) GetProjects() ([]types.Project, error) {
 		}
 		p.URL = url.String
 
-		// Fetch technologies for this project
-		tRows, err := d.pool.Query("SELECT tech_name, version, source FROM project_technologies WHERE project_id = $1", p.ID)
+		// Fetch technologies for this project, including persisted provenance.
+		tRows, err := d.pool.Query(`
+				SELECT tech_name, version, source, evidence_path, evidence_title
+				FROM project_technologies
+				WHERE project_id = $1
+			`, p.ID)
 		if err == nil {
 			for tRows.Next() {
 				var t types.DiscoveredTech
-				if err := tRows.Scan(&t.Name, &t.Version, &t.Source); err == nil {
+				var version sql.NullString
+				var source sql.NullString
+				var evidencePath sql.NullString
+				var evidenceTitle sql.NullString
+				if err := tRows.Scan(&t.Name, &version, &source, &evidencePath, &evidenceTitle); err == nil {
+					t.Version = version.String
+					t.Source = source.String
+					t.EvidencePath = evidencePath.String
+					t.EvidenceTitle = evidenceTitle.String
 					p.Technologies = append(p.Technologies, t)
 				}
 			}
-			tRows.Close()
+			closeRows(tRows)
 		}
 
 		projects = append(projects, p)
@@ -167,7 +181,7 @@ func (d *DB) SaveScan(result types.ScanResult) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer rollbackTx(tx)
 
 	// 1. Ensure project exists or update last_scan
 	var projectID string
@@ -194,9 +208,9 @@ func (d *DB) SaveScan(result types.ScanResult) error {
 	// 3. Insert new project_technologies
 	for _, tech := range result.Technologies {
 		_, err = tx.Exec(`
-			INSERT INTO project_technologies (project_id, tech_name, version, source)
-			VALUES ($1, $2, $3, $4)
-		`, projectID, tech.Name, tech.Version, tech.Source)
+			INSERT INTO project_technologies (project_id, tech_name, version, source, evidence_path, evidence_title)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, projectID, tech.Name, tech.Version, tech.Source, tech.EvidencePath, tech.EvidenceTitle)
 		if err != nil {
 			return err
 		}
@@ -238,7 +252,7 @@ func (d *DB) UpsertEntry(entry types.Entry) error {
 		RETURNING id
 	`).Scan(&radarID)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		// Already exists, fetch it
 		err = d.pool.QueryRow("SELECT id FROM radars WHERE name = 'default'").Scan(&radarID)
 	}
@@ -250,7 +264,7 @@ func (d *DB) UpsertEntry(entry types.Entry) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer rollbackTx(tx)
 
 	// 2. Check if entry exists
 	var existingID string
@@ -268,7 +282,7 @@ func (d *DB) UpsertEntry(entry types.Entry) error {
 		}
 	}
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		// Insert new entry
 		err = tx.QueryRow(`
 			INSERT INTO entries (radar_id, name, quadrant, ring, description, moved, link, tags)
@@ -305,4 +319,22 @@ func (d *DB) UpsertEntry(entry types.Entry) error {
 // Close closes the database connection.
 func (d *DB) Close() error {
 	return d.pool.Close()
+}
+
+func closeRows(rows *sql.Rows) {
+	if rows == nil {
+		return
+	}
+	if err := rows.Close(); err != nil {
+		log.Printf("Error closing rows: %v", err)
+	}
+}
+
+func rollbackTx(tx *sql.Tx) {
+	if tx == nil {
+		return
+	}
+	if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+		log.Printf("Error rolling back transaction: %v", err)
+	}
 }

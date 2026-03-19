@@ -8,13 +8,6 @@ import (
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
 )
 
-var ringPriority = map[string]int{
-	"adopt":  4,
-	"trial":  3,
-	"assess": 2,
-	"hold":   1,
-}
-
 var quadrantOrder = map[string]int{
 	"languages":  0,
 	"frameworks": 1,

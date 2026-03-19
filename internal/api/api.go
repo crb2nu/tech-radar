@@ -68,8 +68,7 @@ func (s *Server) IngestScan(w http.ResponseWriter, r *http.Request) {
 	// Process ingestion in background
 	go s.processIngestion(result)
 
-	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(map[string]string{"status": "queued"})
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
 }
 
 var errAPIKeyValidationUnavailable = errors.New("api key validation unavailable")
@@ -129,7 +128,9 @@ func (s *Server) processIngestion(result types.ScanResult) {
 	// Requirement 1: Meilisearch Indexing
 	if s.meili != nil {
 		index := s.meili.Index("projects")
-		index.AddDocuments(result, nil)
+		if _, err := index.AddDocuments(result, nil); err != nil {
+			log.Printf("Error indexing project scan in Meilisearch: %v", err)
+		}
 	}
 }
 
@@ -182,11 +183,12 @@ func (s *Server) UpsertEntry(w http.ResponseWriter, r *http.Request) {
 	// Sync with Meilisearch
 	if s.meili != nil {
 		index := s.meili.Index("entries")
-		index.AddDocuments(entry, nil)
+		if _, err := index.AddDocuments(entry, nil); err != nil {
+			log.Printf("Error indexing entry in Meilisearch: %v", err)
+		}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(entry)
+	writeJSON(w, http.StatusOK, entry)
 }
 
 // Search handles full-text search across entries and projects.
@@ -217,8 +219,7 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 		"projects": projectRes,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(res)
+	writeJSON(w, http.StatusOK, res)
 }
 
 // GetProjects returns all projects and their discovered technologies.
@@ -234,8 +235,7 @@ func (s *Server) GetProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(projects)
+	writeJSON(w, http.StatusOK, projects)
 }
 
 // GetInsights returns ecosystem-wide technology adoption analytics.
@@ -251,8 +251,7 @@ func (s *Server) GetInsights(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(insights)
+	writeJSON(w, http.StatusOK, insights)
 }
 
 // GetRadar returns the radar data.
@@ -273,6 +272,13 @@ func (s *Server) GetRadar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	writeJSON(w, http.StatusOK, radar)
+}
+
+func writeJSON(w http.ResponseWriter, status int, value interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(radar)
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+	}
 }

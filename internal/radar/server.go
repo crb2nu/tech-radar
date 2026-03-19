@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -87,5 +88,7 @@ func (s *Server) handleRadarData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(radar)
+	if err := json.NewEncoder(w).Encode(radar); err != nil {
+		log.Printf("Error encoding radar response: %v", err)
+	}
 }
