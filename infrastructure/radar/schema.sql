@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS project_technologies (
     tech_name TEXT NOT NULL,
     version TEXT,
     source TEXT,
+    evidence_path TEXT,
+    evidence_title TEXT,
     PRIMARY KEY (project_id, tech_name)
 );
 

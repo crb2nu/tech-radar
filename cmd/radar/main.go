@@ -255,7 +255,9 @@ func addCmd() *cobra.Command {
 	cmd.Flags().StringVar(&ring, "ring", "assess", "Ring (adopt, trial, assess, hold)")
 	cmd.Flags().StringVar(&reason, "reason", "", "Reason for adding/updating")
 	cmd.Flags().StringVar(&tags, "tags", "", "Comma-separated list of tags")
-	cmd.MarkFlagRequired("name")
+	if err := cmd.MarkFlagRequired("name"); err != nil {
+		panic(err)
+	}
 
 	return cmd
 }
@@ -290,7 +292,9 @@ func scanCmd() *cobra.Command {
 			}
 
 			if data, err := os.ReadFile(".tech-radar/config.yaml"); err == nil {
-				yaml.Unmarshal(data, &config)
+				if err := yaml.Unmarshal(data, &config); err != nil {
+					return fmt.Errorf("failed to parse .tech-radar/config.yaml: %w", err)
+				}
 			}
 
 			s := scanner.New(config.Scan)
@@ -366,7 +370,11 @@ func publishResult(apiURL, apiKey string, result types.ScanResult) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to close response body: %v\n", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("server returned status: %s", resp.Status)
@@ -571,11 +579,15 @@ func renderCmd() *cobra.Command {
 				// Copy assets as before
 				entries, err := techradar.UI.ReadDir("web/dist/radar-assets")
 				if err == nil {
-					os.MkdirAll("radar-assets", 0755)
+					if err := os.MkdirAll("radar-assets", 0755); err != nil {
+						return err
+					}
 					for _, entry := range entries {
 						data, err := techradar.UI.ReadFile("web/dist/radar-assets/" + entry.Name())
 						if err == nil {
-							os.WriteFile("radar-assets/"+entry.Name(), data, 0644)
+							if err := os.WriteFile("radar-assets/"+entry.Name(), data, 0644); err != nil {
+								return err
+							}
 						}
 					}
 				}
