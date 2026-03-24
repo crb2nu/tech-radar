@@ -2,6 +2,21 @@
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import {
+    fetchCodebaseAnalysis,
+    initGraph,
+    tickSimulation,
+    nodeColor,
+    nodeOpacity,
+    nodeRadius,
+    categoryColor,
+    allCategories,
+    patternIcon,
+    CATEGORY_LABELS,
+    type CodebaseAnalysis,
+    type GraphNode,
+    type DependencyEdge as GraphEdge,
+  } from './lib/codebase';
+  import {
     canvasQuadrants,
     computeDashboardModel,
     formatDate,
@@ -23,7 +38,7 @@
     type Radar
   } from './lib/dashboard';
 
-  type Tab = 'overview' | 'radar' | 'projects' | 'insights' | 'drift';
+  type Tab = 'overview' | 'radar' | 'projects' | 'insights' | 'drift' | 'codebase';
 
   type EntryDraft = {
     id?: string;
@@ -38,6 +53,7 @@
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: 'overview', label: 'Command deck' },
     { id: 'radar', label: 'Radar' },
+    { id: 'codebase', label: 'Codebase' },
     { id: 'projects', label: 'Projects' },
     { id: 'insights', label: 'Intelligence' },
     { id: 'drift', label: 'Drift' }
@@ -46,8 +62,19 @@
   let radar = $state<Radar | null>(null);
   let projects = $state<Project[]>([]);
   let insights = $state<Insights | null>(null);
+  let codebaseData = $state<CodebaseAnalysis | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(true);
+
+  // Codebase graph state
+  let graphNodes = $state<GraphNode[]>([]);
+  let graphEdges = $state<GraphEdge[]>([]);
+  let graphAnimFrame = $state<number | null>(null);
+  let graphHovered = $state<string | null>(null);
+  let graphSelected = $state<string | null>(null);
+  let graphDragging = $state<GraphNode | null>(null);
+  let cbSubTab = $state<'graph' | 'stacks' | 'files'>('graph');
+  let expandedProjects = $state<Set<string>>(new Set());
 
   let searchQuery = $state('');
   let selectedQuadrant = $state('all');
@@ -132,7 +159,11 @@
       return;
     }
 
-    const [projectsResult, insightsResult] = await Promise.allSettled([fetchProjects(), fetchInsights()]);
+    const [projectsResult, insightsResult, codebaseResult] = await Promise.allSettled([
+      fetchProjects(),
+      fetchInsights(),
+      fetchCodebaseAnalysis(),
+    ]);
 
     if (projectsResult.status === 'fulfilled') {
       projects = projectsResult.value;
@@ -146,6 +177,12 @@
     } else {
       insights = null;
       console.error(insightsResult.reason);
+    }
+
+    if (codebaseResult.status === 'fulfilled') {
+      codebaseData = codebaseResult.value;
+    } else {
+      codebaseData = null;
     }
 
     loading = false;
@@ -291,6 +328,83 @@
     if (entry.moved < 0) return 'Downgraded';
     return 'Steady';
   }
+
+  // --- Codebase graph helpers ---
+  function startGraphSimulation() {
+    if (!codebaseData) return;
+    const w = 800;
+    const h = 560;
+    const init = initGraph(codebaseData, w, h);
+    graphNodes = init.nodes;
+    graphEdges = init.edges;
+    let ticks = 0;
+    const maxTicks = 300;
+
+    function frame() {
+      if (ticks >= maxTicks) return;
+      const alpha = Math.max(0.01, 0.8 * Math.pow(0.99, ticks));
+      tickSimulation(graphNodes, graphEdges, w, h, alpha);
+      graphNodes = [...graphNodes]; // trigger reactivity
+      ticks++;
+      graphAnimFrame = requestAnimationFrame(frame);
+    }
+    if (graphAnimFrame) cancelAnimationFrame(graphAnimFrame);
+    graphAnimFrame = requestAnimationFrame(frame);
+  }
+
+  function onGraphNodeMouseDown(node: GraphNode, event: MouseEvent) {
+    event.preventDefault();
+    graphDragging = node;
+    node.fx = node.x;
+    node.fy = node.y;
+  }
+
+  function onGraphMouseMove(event: MouseEvent) {
+    if (!graphDragging) return;
+    const svg = (event.currentTarget as SVGSVGElement);
+    const rect = svg.getBoundingClientRect();
+    const scaleX = 800 / rect.width;
+    const scaleY = 560 / rect.height;
+    graphDragging.fx = (event.clientX - rect.left) * scaleX;
+    graphDragging.fy = (event.clientY - rect.top) * scaleY;
+    graphDragging.x = graphDragging.fx;
+    graphDragging.y = graphDragging.fy;
+    graphNodes = [...graphNodes];
+  }
+
+  function onGraphMouseUp() {
+    if (graphDragging) {
+      graphDragging.fx = null;
+      graphDragging.fy = null;
+      graphDragging = null;
+    }
+  }
+
+  function toggleProjectExpand(id: string) {
+    const next = new Set(expandedProjects);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    expandedProjects = next;
+  }
+
+  function getNodeEdges(name: string): GraphEdge[] {
+    return graphEdges.filter(e => e.source === name || e.target === name);
+  }
+
+  function getTopNodeEdges(name: string, limit = 6): GraphEdge[] {
+    return getNodeEdges(name).sort((a, b) => b.weight - a.weight).slice(0, limit);
+  }
+
+  let cbCategories = $derived(codebaseData ? allCategories(codebaseData.stacks) : []);
+
+  $effect(() => {
+    if (activeTab === 'codebase' && codebaseData && graphNodes.length === 0) {
+      startGraphSimulation();
+    }
+  });
 </script>
 
 <main class="shell">
@@ -1275,6 +1389,222 @@
                   </div>
                 {:else}
                   <div class="empty-card">No drift detected. The hold ring is currently clean.</div>
+                {/if}
+              </article>
+            </div>
+          {/if}
+
+          {#if activeTab === 'codebase'}
+            <div class="page-grid" in:fade>
+              <article class="panel panel-wide">
+                <div class="panel-header">
+                  <div>
+                    <span class="eyebrow">Codebase intelligence</span>
+                    <h2>Architecture & technology landscape</h2>
+                  </div>
+                  {#if codebaseData}
+                    <div class="cb-summary-pills">
+                      <span class="cb-pill">{codebaseData.summary.total_technologies} technologies</span>
+                      <span class="cb-pill">{codebaseData.summary.total_projects} projects</span>
+                      <span class="cb-pill">{codebaseData.summary.tracked_percent}% tracked</span>
+                      <span class="cb-pill">{codebaseData.summary.total_patterns} patterns</span>
+                    </div>
+                  {/if}
+                </div>
+
+                {#if !codebaseData}
+                  <div class="empty-card">No codebase data available. Scan projects and publish results to populate this view.</div>
+                {:else}
+                  <nav class="cb-sub-tabs">
+                    <button class:active={cbSubTab === 'graph'} onclick={() => cbSubTab = 'graph'}>Dependency graph</button>
+                    <button class:active={cbSubTab === 'stacks'} onclick={() => cbSubTab = 'stacks'}>Tech stacks</button>
+                    <button class:active={cbSubTab === 'files'} onclick={() => cbSubTab = 'files'}>File explorer</button>
+                  </nav>
+
+                  {#if cbSubTab === 'graph'}
+                    <div class="cb-graph-wrap" in:fade>
+                      {#if codebaseData.patterns.length > 0}
+                        <div class="cb-pattern-strip">
+                          {#each codebaseData.patterns as pat}
+                            <span class="cb-pattern-badge" title={pat.signal}>
+                              <span>{pat.icon}</span>
+                              <span>{pat.pattern}</span>
+                              <strong>{pat.projects.length}</strong>
+                            </span>
+                          {/each}
+                        </div>
+                      {/if}
+
+                      <div class="cb-graph-canvas">
+                        <svg
+                          viewBox="0 0 800 560"
+                          class="dep-graph"
+                          onmousemove={onGraphMouseMove}
+                          onmouseup={onGraphMouseUp}
+                          onmouseleave={onGraphMouseUp}
+                        >
+                          <defs>
+                            <filter id="graph-glow">
+                              <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
+                            </filter>
+                          </defs>
+
+                          {#each graphEdges as edge}
+                            {@const sn = graphNodes.find(n => n.name === edge.source)}
+                            {@const tn = graphNodes.find(n => n.name === edge.target)}
+                            {#if sn && tn}
+                              <line
+                                x1={sn.x} y1={sn.y}
+                                x2={tn.x} y2={tn.y}
+                                class="graph-edge"
+                                class:highlighted={graphHovered === edge.source || graphHovered === edge.target || graphSelected === edge.source || graphSelected === edge.target}
+                                style={`stroke-width:${Math.max(1, Math.min(4, edge.weight))};opacity:${(graphHovered === edge.source || graphHovered === edge.target) ? 0.7 : 0.15}`}
+                              />
+                            {/if}
+                          {/each}
+
+                          {#each graphNodes as node}
+                            <g
+                              class="graph-node"
+                              class:hovered={graphHovered === node.name}
+                              class:selected={graphSelected === node.name}
+                              transform={`translate(${node.x},${node.y})`}
+                              onmouseenter={() => graphHovered = node.name}
+                              onmouseleave={() => graphHovered = null}
+                              onmousedown={(e) => onGraphNodeMouseDown(node, e)}
+                              onclick={() => graphSelected = graphSelected === node.name ? null : node.name}
+                              role="button"
+                              tabindex="0"
+                            >
+                              {#if graphHovered === node.name || graphSelected === node.name}
+                                <circle r={node.radius + 4} fill={nodeColor(node)} opacity="0.15" filter="url(#graph-glow)" />
+                              {/if}
+                              <circle
+                                r={node.radius}
+                                fill={nodeColor(node)}
+                                opacity={nodeOpacity(node)}
+                                stroke={node.is_tracked ? nodeColor(node) : '#94a3b8'}
+                                stroke-width={node.is_tracked ? 2 : 1}
+                                stroke-dasharray={node.is_tracked ? 'none' : '3,2'}
+                              />
+                              <text
+                                y={-node.radius - 6}
+                                text-anchor="middle"
+                                class="graph-label"
+                                style={`font-size:${node.usage >= 3 ? 11 : 9}px`}
+                              >{node.name}</text>
+                            </g>
+                          {/each}
+                        </svg>
+                      </div>
+
+                      {#if graphSelected}
+                        {@const sel = graphNodes.find(n => n.name === graphSelected)}
+                        {#if sel}
+                          <div class="cb-node-detail" in:fly={{ y: 10, duration: 200 }}>
+                            <div class="cb-node-detail-header">
+                              <span class="cb-node-dot" style={`background:${nodeColor(sel)}`}></span>
+                              <strong>{sel.name}</strong>
+                              <span class="cb-pill small">{sel.quadrant}</span>
+                              {#if sel.ring}
+                                <span class="cb-pill small">{sel.ring}</span>
+                              {/if}
+                              <span class="cb-pill small">{sel.is_tracked ? 'Tracked' : 'Uncharted'}</span>
+                            </div>
+                            <p>Used in {sel.usage} project{sel.usage !== 1 ? 's' : ''}. Connected to {getNodeEdges(sel.name).length} other technologies.</p>
+                            {#if getNodeEdges(sel.name).length > 0}
+                              <div class="cb-connections">
+                                {#each getTopNodeEdges(sel.name) as edge}
+                                  {@const other = edge.source === sel.name ? edge.target : edge.source}
+                                  <span class="cb-connection-chip">{other} <strong>×{edge.weight}</strong></span>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                        {/if}
+                      {/if}
+
+                      <div class="cb-graph-legend">
+                        <span><span class="legend-dot" style="background:#6366f1"></span> Languages</span>
+                        <span><span class="legend-dot" style="background:#0ea5e9"></span> Frameworks</span>
+                        <span><span class="legend-dot" style="background:#f59e0b"></span> Tools</span>
+                        <span><span class="legend-dot" style="background:#10b981"></span> Platforms</span>
+                        <span>Solid border = tracked · Dashed = uncharted</span>
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if cbSubTab === 'stacks'}
+                    <div class="cb-stacks-wrap" in:fade>
+                      <div class="cb-stack-grid">
+                        <div class="cb-stack-header">
+                          <div class="cb-stack-project-col">Project</div>
+                          {#each cbCategories as cat}
+                            <div class="cb-stack-cat-col" style={`border-bottom: 3px solid ${categoryColor(cat)}`}>
+                              {CATEGORY_LABELS[cat] ?? cat}
+                            </div>
+                          {/each}
+                        </div>
+
+                        {#each codebaseData.stacks as stack}
+                          <div class="cb-stack-row">
+                            <div class="cb-stack-project-col">
+                              <strong>{stack.project_name}</strong>
+                              <div class="chip-row">
+                                {#each (stack.patterns ?? []) as pat}
+                                  <span class="cb-mini-badge" title={pat}>{patternIcon(pat)}</span>
+                                {/each}
+                              </div>
+                              <span class="cb-stack-count">{stack.tech_count} techs</span>
+                            </div>
+                            {#each cbCategories as cat}
+                              <div class="cb-stack-cell">
+                                {#each (stack.categories[cat] ?? []) as tech}
+                                  <span class="cb-tech-chip" style={`border-left: 3px solid ${categoryColor(cat)}`}>{tech}</span>
+                                {/each}
+                                {#if !(stack.categories[cat]?.length)}
+                                  <span class="cb-empty-cell">—</span>
+                                {/if}
+                              </div>
+                            {/each}
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if cbSubTab === 'files'}
+                    <div class="cb-files-wrap" in:fade>
+                      {#each codebaseData.file_tree as tree}
+                        <div class="cb-file-project">
+                          <button class="cb-file-project-header" onclick={() => toggleProjectExpand(tree.project_id)}>
+                            <span class="cb-expand-icon">{expandedProjects.has(tree.project_id) ? '▾' : '▸'}</span>
+                            <strong>{tree.project_name}</strong>
+                            <span class="cb-file-count">{tree.files.length} manifest{tree.files.length !== 1 ? 's' : ''}</span>
+                          </button>
+
+                          {#if expandedProjects.has(tree.project_id)}
+                            <div class="cb-file-list" in:fly={{ y: -8, duration: 150 }}>
+                              {#each tree.files as file}
+                                <div class="cb-file-node">
+                                  <span class="cb-file-icon">📄</span>
+                                  <span class="cb-file-path">{file.path}</span>
+                                  <div class="cb-file-techs">
+                                    {#each file.technologies as tech}
+                                      <span class="cb-file-tech">{tech}</span>
+                                    {/each}
+                                  </div>
+                                </div>
+                              {/each}
+                            </div>
+                          {/if}
+                        </div>
+                      {/each}
+                      {#if codebaseData.file_tree.length === 0}
+                        <div class="empty-card">No file scan data available yet.</div>
+                      {/if}
+                    </div>
+                  {/if}
                 {/if}
               </article>
             </div>
@@ -2704,5 +3034,178 @@
     .bar-row {
       grid-template-columns: 1fr;
     }
+  }
+
+  /* ========= Codebase Visualizer ========= */
+  .cb-summary-pills {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  .cb-pill {
+    font-size: 0.72rem; font-weight: 600;
+    padding: 3px 10px; border-radius: 20px;
+    background: var(--ink-faint, rgba(92, 71, 50, 0.06));
+    color: var(--ink-secondary, #6b5e50);
+    white-space: nowrap;
+  }
+  .cb-pill.small { font-size: 0.65rem; padding: 2px 7px; }
+  .cb-sub-tabs {
+    display: flex; gap: 0; border-bottom: 1.5px solid var(--rule, rgba(92, 71, 50, 0.1));
+    margin-bottom: 20px; margin-top: 4px;
+  }
+  .cb-sub-tabs button {
+    font-size: 0.82rem; font-weight: 600;
+    padding: 8px 18px; background: none; border: none;
+    color: var(--ink-secondary, #6b5e50);
+    cursor: pointer; position: relative;
+    transition: color 0.2s;
+  }
+  .cb-sub-tabs button.active {
+    color: var(--ink, #3a2f24);
+  }
+  .cb-sub-tabs button.active::after {
+    content: ''; position: absolute;
+    bottom: -1.5px; left: 8px; right: 8px;
+    height: 2.5px; background: var(--accent, #1d4ed8);
+    border-radius: 2px;
+  }
+  .cb-sub-tabs button:hover { color: var(--ink, #3a2f24); }
+
+  .cb-graph-wrap { display: flex; flex-direction: column; gap: 12px; }
+  .cb-graph-canvas {
+    background: var(--panel, rgba(255, 252, 247, 0.92));
+    border-radius: 12px; border: 1px solid var(--rule, rgba(92, 71, 50, 0.08));
+    overflow: hidden;
+  }
+  .dep-graph { width: 100%; height: auto; display: block; cursor: grab; }
+  .dep-graph:active { cursor: grabbing; }
+  .graph-edge { stroke: var(--ink-faint, #c4b9a8); stroke-linecap: round; }
+  .graph-edge.highlighted { stroke: var(--accent, #1d4ed8); }
+  .graph-node { cursor: pointer; }
+  .graph-node:hover circle, .graph-node.hovered circle { filter: brightness(1.15); }
+  .graph-node.selected circle { stroke-width: 3 !important; }
+  .graph-label {
+    fill: var(--ink, #3a2f24); font-weight: 600; pointer-events: none;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.9);
+  }
+
+  .cb-node-detail {
+    background: var(--panel, rgba(255, 252, 247, 0.92));
+    border: 1px solid var(--rule, rgba(92, 71, 50, 0.1));
+    border-radius: 10px; padding: 14px 18px;
+    font-size: 0.82rem;
+  }
+  .cb-node-detail-header {
+    display: flex; gap: 8px; align-items: center;
+    flex-wrap: wrap; margin-bottom: 6px;
+  }
+  .cb-node-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    display: inline-block; flex-shrink: 0;
+  }
+  .cb-node-detail p { margin: 0 0 8px; color: var(--ink-secondary, #6b5e50); }
+  .cb-connections { display: flex; gap: 6px; flex-wrap: wrap; }
+  .cb-connection-chip {
+    font-size: 0.72rem; padding: 2px 8px;
+    background: var(--ink-faint, rgba(92, 71, 50, 0.06));
+    border-radius: 6px; color: var(--ink-secondary, #6b5e50);
+  }
+  .cb-connection-chip strong { color: var(--ink, #3a2f24); margin-left: 2px; }
+
+  .cb-pattern-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cb-pattern-badge {
+    display: inline-flex; gap: 5px; align-items: center;
+    font-size: 0.75rem; padding: 4px 12px;
+    background: var(--panel, rgba(255, 252, 247, 0.92));
+    border: 1px solid var(--rule, rgba(92, 71, 50, 0.1));
+    border-radius: 20px; cursor: help;
+    transition: box-shadow 0.2s;
+  }
+  .cb-pattern-badge:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .cb-pattern-badge strong {
+    background: var(--accent, #1d4ed8); color: white;
+    border-radius: 50%; width: 18px; height: 18px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.65rem;
+  }
+
+  .cb-graph-legend {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    font-size: 0.72rem; color: var(--ink-secondary, #6b5e50);
+    align-items: center;
+  }
+  .legend-dot {
+    display: inline-block; width: 10px; height: 10px;
+    border-radius: 50%; margin-right: 4px; vertical-align: middle;
+  }
+
+  .cb-stacks-wrap { overflow-x: auto; }
+  .cb-stack-grid { min-width: 600px; }
+  .cb-stack-header {
+    display: grid;
+    grid-template-columns: 180px repeat(auto-fill, minmax(130px, 1fr));
+    gap: 1px; font-size: 0.75rem; font-weight: 700;
+    color: var(--ink-secondary, #6b5e50);
+    padding-bottom: 8px; border-bottom: 1px solid var(--rule, rgba(92, 71, 50, 0.1));
+  }
+  .cb-stack-header .cb-stack-cat-col { text-align: center; padding-bottom: 6px; }
+  .cb-stack-row {
+    display: grid;
+    grid-template-columns: 180px repeat(auto-fill, minmax(130px, 1fr));
+    gap: 1px; padding: 10px 0;
+    border-bottom: 1px solid var(--rule, rgba(92, 71, 50, 0.05));
+    transition: background 0.15s;
+  }
+  .cb-stack-row:hover { background: rgba(92, 71, 50, 0.02); }
+  .cb-stack-project-col {
+    display: flex; flex-direction: column; gap: 2px; font-size: 0.82rem;
+  }
+  .cb-stack-count { font-size: 0.7rem; color: var(--ink-secondary, #6b5e50); }
+  .cb-stack-cell {
+    display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start;
+    padding: 2px 4px;
+  }
+  .cb-tech-chip {
+    font-size: 0.7rem; padding: 2px 6px;
+    background: var(--ink-faint, rgba(92, 71, 50, 0.04));
+    border-radius: 4px; white-space: nowrap;
+  }
+  .cb-empty-cell { color: var(--ink-faint, #c4b9a8); font-size: 0.7rem; }
+  .cb-mini-badge { font-size: 0.9rem; cursor: help; }
+
+  .cb-files-wrap { display: flex; flex-direction: column; gap: 4px; }
+  .cb-file-project {
+    border: 1px solid var(--rule, rgba(92, 71, 50, 0.08));
+    border-radius: 8px; overflow: hidden;
+  }
+  .cb-file-project-header {
+    display: flex; gap: 10px; align-items: center;
+    width: 100%; padding: 10px 14px;
+    background: var(--ink-faint, rgba(92, 71, 50, 0.03));
+    border: none; cursor: pointer; font-size: 0.85rem;
+    text-align: left; transition: background 0.15s;
+  }
+  .cb-file-project-header:hover { background: rgba(92, 71, 50, 0.06); }
+  .cb-expand-icon { font-size: 0.8rem; width: 12px; opacity: 0.5; }
+  .cb-file-count {
+    margin-left: auto; font-size: 0.72rem;
+    color: var(--ink-secondary, #6b5e50);
+  }
+  .cb-file-list { padding: 4px 14px 10px 36px; }
+  .cb-file-node {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 5px 0; border-bottom: 1px solid var(--rule, rgba(92, 71, 50, 0.04));
+    flex-wrap: wrap;
+  }
+  .cb-file-node:last-child { border-bottom: none; }
+  .cb-file-icon { font-size: 0.9rem; flex-shrink: 0; }
+  .cb-file-path {
+    font-family: monospace; font-size: 0.78rem;
+    font-weight: 600; flex-shrink: 0; min-width: 130px;
+  }
+  .cb-file-techs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .cb-file-tech {
+    font-size: 0.68rem; padding: 1px 6px;
+    background: var(--ink-faint, rgba(92, 71, 50, 0.04));
+    border-radius: 4px;
   }
 </style>
