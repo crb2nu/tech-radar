@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/meilisearch/meilisearch-go"
+	"gitlab.flexinfer.ai/services/tech-radar/internal/codebase"
 	"gitlab.flexinfer.ai/services/tech-radar/internal/db"
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
 )
@@ -273,6 +274,28 @@ func (s *Server) GetRadar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, radar)
+}
+
+// GetCodebaseAnalysis returns the codebase visualization payload.
+func (s *Server) GetCodebaseAnalysis(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		http.Error(w, "Database not configured", http.StatusInternalServerError)
+		return
+	}
+
+	radar, err := s.db.GetRadar("default")
+	if err != nil {
+		radar = &types.Radar{}
+	}
+
+	projects, err := s.db.GetProjects()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	analysis := codebase.Analyze(radar, projects)
+	writeJSON(w, http.StatusOK, analysis)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value interface{}) {
