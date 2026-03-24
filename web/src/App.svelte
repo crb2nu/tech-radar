@@ -1439,6 +1439,8 @@
                         <svg
                           viewBox="0 0 800 560"
                           class="dep-graph"
+                          role="application"
+                          aria-label="Technology dependency graph"
                           onmousemove={onGraphMouseMove}
                           onmouseup={onGraphMouseUp}
                           onmouseleave={onGraphMouseUp}
@@ -1473,6 +1475,7 @@
                               onmouseleave={() => graphHovered = null}
                               onmousedown={(e) => onGraphNodeMouseDown(node, e)}
                               onclick={() => graphSelected = graphSelected === node.name ? null : node.name}
+                              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); graphSelected = graphSelected === node.name ? null : node.name; } }}
                               role="button"
                               tabindex="0"
                             >
