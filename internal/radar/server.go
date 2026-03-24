@@ -69,6 +69,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/v1/search", s.apiServer.Search)
 	mux.HandleFunc("/api/v1/projects", s.apiServer.GetProjects)
 	mux.HandleFunc("/api/v1/insights", s.apiServer.GetInsights)
+	mux.HandleFunc("/api/v1/codebase", s.apiServer.GetCodebaseAnalysis)
 
 	fmt.Printf("Starting radar server on http://0.0.0.0:%d\n", s.port)
 	return http.ListenAndServe(fmt.Sprintf(":%d", s.port), mux)
