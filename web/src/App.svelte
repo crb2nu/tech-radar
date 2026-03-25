@@ -3,6 +3,7 @@
   import { fade, fly } from 'svelte/transition';
   import {
     fetchCodebaseAnalysis,
+    getGraphView,
     initGraph,
     tickSimulation,
     nodeColor,
@@ -11,8 +12,10 @@
     categoryColor,
     allCategories,
     patternIcon,
+    shouldShowGraphLabel,
     CATEGORY_LABELS,
     type CodebaseAnalysis,
+    type GraphDensityMode,
     type GraphNode,
     type DependencyEdge as GraphEdge,
   } from './lib/codebase';
@@ -95,6 +98,7 @@
   let graphHovered = $state<string | null>(null);
   let graphSelected = $state<string | null>(null);
   let graphDragging = $state<GraphNode | null>(null);
+  let cbGraphMode = $state<GraphDensityMode>('focused');
   let cbSubTab = $state<'graph' | 'stacks' | 'files'>('graph');
   let expandedProjects = $state<Set<string>>(new Set());
 
@@ -459,6 +463,9 @@
   }
 
   let cbCategories = $derived(codebaseData ? allCategories(codebaseData.stacks) : []);
+  const cbGraphView = $derived(
+    getGraphView(graphNodes, graphEdges, cbGraphMode, [graphSelected, graphHovered].filter(Boolean) as string[])
+  );
 
   $effect(() => {
     if (activeTab === 'codebase' && codebaseData && graphNodes.length === 0) {
@@ -1664,6 +1671,35 @@
 
                   {#if cbSubTab === 'graph'}
                     <div class="cb-graph-wrap" in:fade>
+                      <div class="cb-graph-toolbar">
+                        <div class="cb-graph-summary">
+                          <strong>{cbGraphView.nodes.length} of {graphNodes.length} nodes shown</strong>
+                          <span>
+                            {cbGraphMode === 'focused'
+                              ? 'Focused mode keeps tracked and high-signal dependencies readable.'
+                              : 'Full mode shows the entire dependency graph with restrained labels.'}
+                          </span>
+                        </div>
+                        <div class="cb-graph-mode" role="group" aria-label="Dependency graph density">
+                          <button
+                            type="button"
+                            class:active={cbGraphMode === 'focused'}
+                            aria-pressed={cbGraphMode === 'focused'}
+                            onclick={() => cbGraphMode = 'focused'}
+                          >
+                            Focused
+                          </button>
+                          <button
+                            type="button"
+                            class:active={cbGraphMode === 'full'}
+                            aria-pressed={cbGraphMode === 'full'}
+                            onclick={() => cbGraphMode = 'full'}
+                          >
+                            Full
+                          </button>
+                        </div>
+                      </div>
+
                       {#if codebaseData.patterns.length > 0}
                         <div class="cb-pattern-strip">
                           {#each codebaseData.patterns as pat}
@@ -1697,9 +1733,9 @@
                             </filter>
                           </defs>
 
-                          {#each graphEdges as edge}
-                            {@const sn = graphNodes.find(n => n.name === edge.source)}
-                            {@const tn = graphNodes.find(n => n.name === edge.target)}
+                          {#each cbGraphView.edges as edge}
+                            {@const sn = cbGraphView.nodes.find(n => n.name === edge.source)}
+                            {@const tn = cbGraphView.nodes.find(n => n.name === edge.target)}
                             {#if sn && tn}
                               <line
                                 x1={sn.x} y1={sn.y}
@@ -1711,7 +1747,7 @@
                             {/if}
                           {/each}
 
-                          {#each graphNodes as node}
+                          {#each cbGraphView.nodes as node}
                             <g
                               class="graph-node"
                               class:hovered={graphHovered === node.name}
@@ -1736,12 +1772,14 @@
                                 stroke-width={node.is_tracked ? 2 : 1}
                                 stroke-dasharray={node.is_tracked ? 'none' : '3,2'}
                               />
-                              <text
-                                y={-node.radius - 6}
-                                text-anchor="middle"
-                                class="graph-label"
-                                style={`font-size:${node.usage >= 3 ? 11 : 9}px`}
-                              >{node.name}</text>
+                              {#if shouldShowGraphLabel(node, cbGraphView.edges, graphHovered, graphSelected, cbGraphMode)}
+                                <text
+                                  y={-node.radius - 8}
+                                  text-anchor="middle"
+                                  class="graph-label"
+                                  style={`font-size:${node.usage >= 5 ? 11 : 9}px`}
+                                >{node.name}</text>
+                              {/if}
                             </g>
                           {/each}
                         </svg>
@@ -2388,8 +2426,9 @@
     border-radius: 999px;
     background: rgba(24, 36, 58, 0.05);
     color: inherit;
-    padding: 0.58rem 0.75rem;
-    font-size: 0.84rem;
+    min-height: 2.9rem;
+    padding: 0.8rem 1rem;
+    font-size: 0.95rem;
     font-weight: 700;
     text-transform: capitalize;
     transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
@@ -3401,10 +3440,55 @@
   .cb-sub-tabs button:hover { color: var(--ink, #3a2f24); }
 
   .cb-graph-wrap { display: flex; flex-direction: column; gap: 12px; }
+  .cb-graph-toolbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .cb-graph-summary {
+    display: grid;
+    gap: 0.3rem;
+  }
+  .cb-graph-summary strong {
+    font-size: 0.98rem;
+  }
+  .cb-graph-summary span {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .cb-graph-mode {
+    display: inline-grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+  .cb-graph-mode button {
+    min-width: 6.5rem;
+    min-height: 2.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--ink);
+    padding: 0.7rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+  }
+  .cb-graph-mode button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(29, 78, 216, 0.22);
+  }
+  .cb-graph-mode button.active {
+    background: linear-gradient(135deg, rgba(29, 78, 216, 0.14), rgba(76, 199, 187, 0.2));
+    border-color: rgba(29, 78, 216, 0.28);
+  }
   .cb-graph-canvas {
     background: var(--panel, rgba(255, 252, 247, 0.92));
     border-radius: 12px; border: 1px solid var(--rule, rgba(92, 71, 50, 0.08));
     overflow: hidden;
+    min-height: 560px;
   }
   .dep-graph { width: 100%; height: auto; display: block; cursor: grab; }
   .dep-graph:active { cursor: grabbing; }
@@ -3414,8 +3498,8 @@
   .graph-node:hover circle, .graph-node.hovered circle { filter: brightness(1.15); }
   .graph-node.selected circle { stroke-width: 3 !important; }
   .graph-label {
-    fill: var(--ink, #3a2f24); font-weight: 600; pointer-events: none;
-    text-shadow: 0 1px 2px rgba(255,255,255,0.9);
+    fill: color-mix(in srgb, var(--ink, #3a2f24) 84%, transparent); font-weight: 600; pointer-events: none;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.92);
   }
 
   .cb-node-detail {
@@ -3841,6 +3925,17 @@
     color: var(--muted);
   }
 
+  :global(body.dark) .cb-graph-mode button {
+    background: rgba(240, 246, 252, 0.04);
+    border-color: rgba(240, 246, 252, 0.1);
+    color: var(--ink);
+  }
+
+  :global(body.dark) .cb-graph-mode button.active {
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.16), rgba(63, 185, 80, 0.18));
+    border-color: rgba(88, 166, 255, 0.3);
+  }
+
   :global(body.dark) .cb-graph-canvas {
     background: var(--panel);
   }
@@ -3925,6 +4020,18 @@
   }
 
   @media (max-width: 760px) {
+    .theme-segmented {
+      grid-template-columns: 1fr;
+    }
+
+    .cb-graph-toolbar {
+      display: grid;
+    }
+
+    .cb-graph-mode {
+      grid-template-columns: 1fr;
+    }
+
     .intel-eco-row {
       grid-template-columns: 1fr;
     }
