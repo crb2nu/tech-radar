@@ -83,6 +83,8 @@ export interface GraphNode extends TechNode {
   radius: number;
 }
 
+export type GraphDensityMode = 'focused' | 'full';
+
 const QUADRANT_COLORS: Record<string, string> = {
   languages: '#6366f1',
   frameworks: '#0ea5e9',
@@ -223,6 +225,81 @@ export function tickSimulation(
     n.x = Math.max(pad, Math.min(width - pad, n.x));
     n.y = Math.max(pad, Math.min(height - pad, n.y));
   }
+}
+
+function edgeStrengthByNode(edges: DependencyEdge[]): Map<string, number> {
+  const strength = new Map<string, number>();
+  for (const edge of edges) {
+    const weight = Math.min(edge.weight, 4);
+    strength.set(edge.source, (strength.get(edge.source) ?? 0) + weight);
+    strength.set(edge.target, (strength.get(edge.target) ?? 0) + weight);
+  }
+  return strength;
+}
+
+export function getGraphView(
+  nodes: GraphNode[],
+  edges: DependencyEdge[],
+  mode: GraphDensityMode,
+  focusedNames: string[] = []
+): { nodes: GraphNode[]; edges: DependencyEdge[] } {
+  if (mode === 'full') {
+    return { nodes, edges };
+  }
+
+  const sticky = new Set(focusedNames.filter(Boolean));
+  const strength = edgeStrengthByNode(edges);
+  const scored = [...nodes]
+    .map((node) => ({
+      node,
+      score:
+        node.usage * 2 +
+        (node.is_tracked ? 5 : 0) +
+        (strength.get(node.name) ?? 0) +
+        (sticky.has(node.name) ? 100 : 0),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const keep = new Set(scored.slice(0, 42).map(({ node }) => node.name));
+  for (const name of sticky) {
+    keep.add(name);
+    for (const edge of edges) {
+      if (edge.source === name) keep.add(edge.target);
+      if (edge.target === name) keep.add(edge.source);
+    }
+  }
+
+  const nextEdges = edges.filter((edge) => {
+    if (!keep.has(edge.source) || !keep.has(edge.target)) return false;
+    return edge.weight >= 2 || sticky.has(edge.source) || sticky.has(edge.target);
+  });
+
+  const connected = new Set<string>();
+  for (const edge of nextEdges) {
+    connected.add(edge.source);
+    connected.add(edge.target);
+  }
+  for (const name of sticky) connected.add(name);
+
+  const nextNodes = nodes.filter((node) => connected.has(node.name));
+  return { nodes: nextNodes, edges: nextEdges };
+}
+
+export function shouldShowGraphLabel(
+  node: GraphNode,
+  edges: DependencyEdge[],
+  hoveredName: string | null,
+  selectedName: string | null,
+  mode: GraphDensityMode
+): boolean {
+  if (node.name === hoveredName || node.name === selectedName) return true;
+
+  const strength = edgeStrengthByNode(edges).get(node.name) ?? 0;
+  if (mode === 'full') {
+    return node.is_tracked && (node.usage >= 7 || strength >= 8);
+  }
+
+  return node.is_tracked && (node.usage >= 5 || strength >= 6);
 }
 
 /* ---------- Stack explorer helpers ---------- */
