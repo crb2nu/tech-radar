@@ -16,6 +16,8 @@ spec:
     metadata:
       labels:
         app: tech-radar
+      annotations:
+        restartedAt: "2026-03-25T19:32:23Z"
     spec:
       initContainers:
         - name: init-radar
