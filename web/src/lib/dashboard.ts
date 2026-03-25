@@ -166,6 +166,41 @@ export interface RadarSection {
   entries: Entry[];
 }
 
+/** A shared dependency ranked by how many projects use it */
+export interface DependencyHotspot {
+  name: string;
+  source: string;
+  projectCount: number;
+  projects: string[];
+}
+
+/** Language ecosystem breakdown */
+export interface EcosystemStat {
+  ecosystem: string;
+  icon: string;
+  projectCount: number;
+  techCount: number;
+  projects: string[];
+}
+
+/** Stack similarity between two projects */
+export interface StackSimilarity {
+  projectA: string;
+  projectB: string;
+  sharedCount: number;
+  similarity: number; // 0-1
+  sharedTechs: string[];
+}
+
+/** Polyglot complexity for a project */
+export interface PolyglotProfile {
+  name: string;
+  ecosystems: string[];
+  ecosystemCount: number;
+  totalTechs: number;
+  complexityLabel: 'Focused' | 'Balanced' | 'Polyglot' | 'Complex';
+}
+
 export interface DashboardModel {
   renderableEntries: Entry[];
   offCanvasEntries: Entry[];
@@ -197,6 +232,11 @@ export interface DashboardModel {
   projectSpotlight: ProjectIntelligence[];
   radarSections: RadarSection[];
   recentDecisionText: string;
+  // New intelligence fields
+  dependencyHotspots: DependencyHotspot[];
+  ecosystemBreakdown: EcosystemStat[];
+  stackSimilarities: StackSimilarity[];
+  polyglotProfiles: PolyglotProfile[];
 }
 
 export const canvasQuadrants = ['languages', 'frameworks', 'tools', 'platforms'] as const;
@@ -413,6 +453,12 @@ export function computeDashboardModel(
     }
   ];
 
+  // New intelligence computations
+  const dependencyHotspots = computeDependencyHotspots(projects);
+  const ecosystemBreakdown = computeEcosystemBreakdown(projects);
+  const stackSimilarities = computeStackSimilarities(projects);
+  const polyglotProfiles = computePolyglotProfiles(projects);
+
   return {
     renderableEntries,
     offCanvasEntries,
@@ -444,7 +490,11 @@ export function computeDashboardModel(
     projectSpotlight,
     radarSections,
     recentDecisionText:
-      recentMoves[0] ? `${recentMoves[0].name} most recently moved to ${recentMoves[0].to_ring.toUpperCase()}.` : 'No recent governance movement has been recorded yet.'
+      recentMoves[0] ? `${recentMoves[0].name} most recently moved to ${recentMoves[0].to_ring.toUpperCase()}.` : 'No recent governance movement has been recorded yet.',
+    dependencyHotspots,
+    ecosystemBreakdown,
+    stackSimilarities,
+    polyglotProfiles,
   };
 }
 
@@ -1047,4 +1097,133 @@ function buildRecommendations(input: {
   }
 
   return recommendations.sort(compareRecommendations).slice(0, 8);
+}
+
+// ── Intelligence computation functions ──────────────────────────────
+
+const ECOSYSTEM_MAP: Record<string, { label: string; icon: string }> = {
+  'go.mod': { label: 'Go', icon: '🐹' },
+  'package.json': { label: 'Node / JS', icon: '🟩' },
+  'pyproject.toml': { label: 'Python', icon: '🐍' },
+  'requirements.txt': { label: 'Python', icon: '🐍' },
+  'Cargo.toml': { label: 'Rust', icon: '🦀' },
+  'mcp.json': { label: 'MCP', icon: '🤖' },
+  '.mcp.json': { label: 'MCP', icon: '🤖' },
+};
+
+function classifyEcosystem(source: string): { label: string; icon: string } {
+  return ECOSYSTEM_MAP[source] ?? { label: source || 'Other', icon: '📦' };
+}
+
+function computeDependencyHotspots(projects: Project[]): DependencyHotspot[] {
+  const map = new Map<string, { source: string; projects: Set<string> }>();
+
+  for (const project of projects) {
+    for (const tech of project.technologies ?? []) {
+      const key = tech.name.toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, { source: tech.source, projects: new Set() });
+      }
+      map.get(key)!.projects.add(project.name);
+    }
+  }
+
+  return Array.from(map.entries())
+    .filter(([, v]) => v.projects.size >= 2)
+    .map(([name, v]) => ({
+      name,
+      source: v.source,
+      projectCount: v.projects.size,
+      projects: Array.from(v.projects).sort(),
+    }))
+    .sort((a, b) => b.projectCount - a.projectCount)
+    .slice(0, 20);
+}
+
+function computeEcosystemBreakdown(projects: Project[]): EcosystemStat[] {
+  const map = new Map<string, { icon: string; projects: Set<string>; techs: Set<string> }>();
+
+  for (const project of projects) {
+    for (const tech of project.technologies ?? []) {
+      const eco = classifyEcosystem(tech.source);
+      if (!map.has(eco.label)) {
+        map.set(eco.label, { icon: eco.icon, projects: new Set(), techs: new Set() });
+      }
+      const entry = map.get(eco.label)!;
+      entry.projects.add(project.name);
+      entry.techs.add(tech.name.toLowerCase());
+    }
+  }
+
+  return Array.from(map.entries())
+    .map(([ecosystem, v]) => ({
+      ecosystem,
+      icon: v.icon,
+      projectCount: v.projects.size,
+      techCount: v.techs.size,
+      projects: Array.from(v.projects).sort(),
+    }))
+    .sort((a, b) => b.projectCount - a.projectCount);
+}
+
+function computeStackSimilarities(projects: Project[]): StackSimilarity[] {
+  const techSets = projects.map((p) => ({
+    name: p.name,
+    techs: new Set((p.technologies ?? []).map((t) => t.name.toLowerCase())),
+  }));
+
+  const similarities: StackSimilarity[] = [];
+
+  for (let i = 0; i < techSets.length; i++) {
+    for (let j = i + 1; j < techSets.length; j++) {
+      const a = techSets[i];
+      const b = techSets[j];
+      if (a.techs.size === 0 || b.techs.size === 0) continue;
+
+      const shared = Array.from(a.techs).filter((t) => b.techs.has(t));
+      if (shared.length < 3) continue;
+
+      const union = new Set([...a.techs, ...b.techs]);
+      const similarity = shared.length / union.size; // Jaccard index
+
+      similarities.push({
+        projectA: a.name,
+        projectB: b.name,
+        sharedCount: shared.length,
+        similarity,
+        sharedTechs: shared.sort().slice(0, 8),
+      });
+    }
+  }
+
+  return similarities.sort((a, b) => b.similarity - a.similarity).slice(0, 12);
+}
+
+function computePolyglotProfiles(projects: Project[]): PolyglotProfile[] {
+  return projects
+    .map((project) => {
+      const ecosystems = new Set<string>();
+      for (const tech of project.technologies ?? []) {
+        const eco = classifyEcosystem(tech.source);
+        if (eco.label !== 'MCP' && eco.label !== 'Other') {
+          ecosystems.add(eco.label);
+        }
+      }
+
+      const count = ecosystems.size;
+      let complexityLabel: PolyglotProfile['complexityLabel'] = 'Focused';
+      if (count >= 4) complexityLabel = 'Complex';
+      else if (count >= 3) complexityLabel = 'Polyglot';
+      else if (count >= 2) complexityLabel = 'Balanced';
+
+      return {
+        name: project.name,
+        ecosystems: Array.from(ecosystems).sort(),
+        ecosystemCount: count,
+        totalTechs: project.technologies?.length ?? 0,
+        complexityLabel,
+      };
+    })
+    .filter((p) => p.totalTechs > 0)
+    .sort((a, b) => b.ecosystemCount - a.ecosystemCount || b.totalTechs - a.totalTechs);
 }

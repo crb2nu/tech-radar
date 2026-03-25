@@ -30,12 +30,16 @@
     ringMeta,
     ringOrder,
     uniqueTags,
+    type DependencyHotspot,
+    type EcosystemStat,
     type Entry,
     type GovernanceRecommendation,
     type Insights,
     type MotionVector,
+    type PolyglotProfile,
     type Project,
-    type Radar
+    type Radar,
+    type StackSimilarity
   } from './lib/dashboard';
 
   type Tab = 'overview' | 'radar' | 'projects' | 'insights' | 'drift' | 'codebase';
@@ -91,6 +95,16 @@
   let formReason = $state('');
   let formTagsInput = $state('');
   let editEntryData = $state<EntryDraft>(emptyEntryDraft());
+
+  // Dark mode state
+  let isDark = $state(typeof localStorage !== 'undefined' && localStorage.getItem('tr-theme') === 'dark');
+
+  $effect(() => {
+    document.body.classList.toggle('dark', isDark);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('tr-theme', isDark ? 'dark' : 'light');
+    }
+  });
 
   let searchField = $state<HTMLInputElement | null>(null);
 
@@ -495,6 +509,16 @@
           {#if isAdminMode}
             <button class="secondary-button wide-button" onclick={() => openEntryForm()}>Add technology</button>
           {/if}
+        </section>
+
+        <section class="sidebar-panel">
+          <label class="toggle-row">
+            <span>{isDark ? '🌙' : '☀️'} Dark mode</span>
+            <span class="toggle">
+              <input type="checkbox" bind:checked={isDark} />
+              <span></span>
+            </span>
+          </label>
         </section>
       </aside>
 
@@ -1353,6 +1377,144 @@
                   </div>
                 {:else}
                   <div class="empty-card">No history yet. Start recording ring changes to unlock movement analytics.</div>
+                {/if}
+              </article>
+
+              <!-- ============ NEW INTELLIGENCE PANELS ============ -->
+
+              <article class="panel panel-wide">
+                <div class="panel-header">
+                  <div>
+                    <span class="eyebrow">Dependency intelligence</span>
+                    <h2>Cross-project hotspots</h2>
+                  </div>
+                  <p>Dependencies shared across the most projects — these are your foundational standards.</p>
+                </div>
+                {#if dashboard.dependencyHotspots.length > 0}
+                  <div class="intel-hotspot-grid">
+                    {#each dashboard.dependencyHotspots.slice(0, 12) as hotspot}
+                      <div class="intel-hotspot-card">
+                        <div class="intel-hotspot-header">
+                          <strong>{hotspot.name}</strong>
+                          <span class="signal-pill good">{hotspot.projectCount} projects</span>
+                        </div>
+                        <span class="intel-source-tag">{hotspot.source}</span>
+                        <div class="intel-project-tags">
+                          {#each hotspot.projects.slice(0, 4) as pname}
+                            <span class="cb-pill small">{pname}</span>
+                          {/each}
+                          {#if hotspot.projects.length > 4}
+                            <span class="cb-pill small">+{hotspot.projects.length - 4}</span>
+                          {/if}
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="empty-card">No cross-project dependency data available yet. Run scans to populate.</div>
+                {/if}
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
+                    <span class="eyebrow">Language ecosystems</span>
+                    <h2>Technology landscape by runtime</h2>
+                  </div>
+                </div>
+                {#if dashboard.ecosystemBreakdown.length > 0}
+                  <div class="intel-eco-stack">
+                    {#each dashboard.ecosystemBreakdown as eco}
+                      <div class="intel-eco-row">
+                        <div class="intel-eco-label">
+                          <span class="intel-eco-icon">{eco.icon}</span>
+                          <strong>{eco.ecosystem}</strong>
+                        </div>
+                        <div class="intel-eco-bars">
+                          <div class="intel-eco-bar">
+                            <div class="bar-track">
+                              <div class="bar-fill neutral" style={`width:${Math.min(100, (eco.projectCount / Math.max(1, dashboard.projectCount)) * 100)}%`}></div>
+                            </div>
+                            <span class="muted">{eco.projectCount} projects</span>
+                          </div>
+                          <div class="intel-eco-bar">
+                            <div class="bar-track">
+                              <div class="bar-fill" style={`width:${Math.min(100, (eco.techCount / Math.max(1, 100)) * 100)}%; --bar-color: rgba(76, 199, 187, 0.7)`}></div>
+                            </div>
+                            <span class="muted">{eco.techCount} unique deps</span>
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="empty-card">No ecosystem data yet — scan your workspace to see the breakdown.</div>
+                {/if}
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
+                    <span class="eyebrow">Polyglot complexity</span>
+                    <h2>Project runtime breadth</h2>
+                  </div>
+                  <p>How many language ecosystems each project spans.</p>
+                </div>
+                {#if dashboard.polyglotProfiles.length > 0}
+                  <div class="signal-stack">
+                    {#each dashboard.polyglotProfiles.slice(0, 10) as profile}
+                      <div class="signal-row">
+                        <div>
+                          <strong>{profile.name}</strong>
+                          <span>{profile.ecosystems.join(' · ')} — {profile.totalTechs} dependencies</span>
+                        </div>
+                        <span class={`signal-pill ${profile.complexityLabel === 'Complex' ? 'danger' : profile.complexityLabel === 'Polyglot' ? 'watch' : 'good'}`}>
+                          {profile.complexityLabel}
+                        </span>
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="empty-card">Polyglot analysis requires project scan data.</div>
+                {/if}
+              </article>
+
+              <article class="panel panel-wide">
+                <div class="panel-header">
+                  <div>
+                    <span class="eyebrow">Stack convergence</span>
+                    <h2>Which projects share the most DNA</h2>
+                  </div>
+                  <p>Jaccard similarity of technology stacks — higher means more shared dependencies.</p>
+                </div>
+                {#if dashboard.stackSimilarities.length > 0}
+                  <div class="intel-similarity-grid">
+                    {#each dashboard.stackSimilarities.slice(0, 8) as sim}
+                      <div class="intel-similarity-card">
+                        <div class="intel-sim-header">
+                          <strong>{sim.projectA}</strong>
+                          <span class="intel-sim-arrow">⇄</span>
+                          <strong>{sim.projectB}</strong>
+                        </div>
+                        <div class="intel-sim-meter">
+                          <div class="bar-track">
+                            <div class="bar-fill neutral" style={`width:${Math.round(sim.similarity * 100)}%`}></div>
+                          </div>
+                          <span class="muted">{Math.round(sim.similarity * 100)}% overlap · {sim.sharedCount} shared</span>
+                        </div>
+                        <div class="intel-project-tags">
+                          {#each sim.sharedTechs.slice(0, 6) as tech}
+                            <span class="cb-pill small">{tech}</span>
+                          {/each}
+                          {#if sim.sharedTechs.length > 6}
+                            <span class="cb-pill small">+{sim.sharedTechs.length - 6}</span>
+                          {/if}
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="empty-card">Stack convergence requires at least 2 projects with shared dependencies.</div>
                 {/if}
               </article>
             </div>
@@ -3210,5 +3372,374 @@
     font-size: 0.68rem; padding: 1px 6px;
     background: var(--ink-faint, rgba(92, 71, 50, 0.04));
     border-radius: 4px;
+  }
+
+  /* ========= Intelligence panels ========= */
+  .intel-hotspot-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.85rem;
+  }
+  .intel-hotspot-card {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 0.85rem 1rem;
+    background: rgba(255, 255, 255, 0.54);
+    display: grid;
+    gap: 0.5rem;
+    transition: transform 160ms ease, border-color 160ms ease;
+  }
+  .intel-hotspot-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(29, 78, 216, 0.22);
+  }
+  .intel-hotspot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .intel-source-tag {
+    font-size: 0.72rem;
+    color: var(--muted);
+    opacity: 0.8;
+  }
+  .intel-project-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .intel-eco-stack {
+    display: grid;
+    gap: 1rem;
+  }
+  .intel-eco-row {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 0.85rem;
+    align-items: center;
+  }
+  .intel-eco-label {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.95rem;
+  }
+  .intel-eco-icon {
+    font-size: 1.2rem;
+  }
+  .intel-eco-bars {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .intel-eco-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    align-items: center;
+    font-size: 0.84rem;
+  }
+
+  .intel-similarity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 0.85rem;
+  }
+  .intel-similarity-card {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 0.85rem 1rem;
+    background: rgba(255, 255, 255, 0.54);
+    display: grid;
+    gap: 0.55rem;
+  }
+  .intel-sim-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    font-size: 0.92rem;
+  }
+  .intel-sim-arrow {
+    color: var(--accent);
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .intel-sim-meter {
+    display: grid;
+    gap: 0.3rem;
+    font-size: 0.84rem;
+  }
+
+  /* ========= Dark mode ========= */
+  :global(body.dark) {
+    --paper: #0d1117;
+    --panel: rgba(22, 27, 34, 0.92);
+    --panel-strong: #161b22;
+    --ink: #e6edf3;
+    --muted: #8b949e;
+    --line: rgba(240, 246, 252, 0.12);
+    --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    --good: #3fb950;
+    --watch: #d29922;
+    --danger: #f85149;
+    --accent: #58a6ff;
+    background:
+      radial-gradient(circle at top left, rgba(88, 166, 255, 0.08), transparent 32%),
+      radial-gradient(circle at top right, rgba(210, 153, 34, 0.1), transparent 24%),
+      linear-gradient(180deg, #0d1117 0%, #10161d 100%);
+    color: var(--ink);
+  }
+
+  :global(body.dark) .sidebar {
+    background:
+      linear-gradient(180deg, rgba(8, 13, 21, 0.97), rgba(13, 17, 23, 0.96)),
+      radial-gradient(circle at top left, rgba(63, 185, 80, 0.15), transparent 35%);
+  }
+
+  :global(body.dark) .hero {
+    background:
+      linear-gradient(135deg, rgba(22, 27, 34, 0.92), rgba(30, 37, 48, 0.88)),
+      radial-gradient(circle at top right, rgba(63, 185, 80, 0.09), transparent 32%);
+  }
+
+  :global(body.dark) .signal-row,
+  :global(body.dark) .entry-card {
+    background: rgba(22, 27, 34, 0.72);
+  }
+
+  :global(body.dark) .actionable:hover {
+    border-color: rgba(88, 166, 255, 0.24);
+    background: rgba(30, 40, 56, 0.92);
+  }
+
+  :global(body.dark) .search-shell {
+    background: rgba(240, 246, 252, 0.06);
+  }
+
+  :global(body.dark) .search-shell input {
+    color: var(--ink);
+  }
+
+  :global(body.dark) .search-shell kbd {
+    border-color: rgba(240, 246, 252, 0.1);
+    background: rgba(22, 27, 34, 0.8);
+    color: var(--muted);
+  }
+
+  :global(body.dark) .toolbar select,
+  :global(body.dark) .form-grid select,
+  :global(body.dark) .form-grid input,
+  :global(body.dark) .form-grid textarea {
+    background: #0d1117;
+    border-color: var(--line);
+    color: var(--ink);
+  }
+
+  :global(body.dark) .hero-notes span {
+    background: rgba(22, 27, 34, 0.75);
+    border-color: var(--line);
+  }
+
+  :global(body.dark) .search-card,
+  :global(body.dark) .toolbar {
+    background: rgba(22, 27, 34, 0.76);
+    border-color: var(--line);
+  }
+
+  :global(body.dark) .ring-section {
+    background: rgba(22, 27, 34, 0.54);
+  }
+
+  :global(body.dark) .ring-circle {
+    fill: color-mix(in srgb, var(--ring-color), #0d1117 82%);
+    stroke: color-mix(in srgb, var(--ring-color), #1a2332 40%);
+  }
+
+  :global(body.dark) .radar-canvas {
+    background:
+      radial-gradient(circle at center, rgba(63, 185, 80, 0.06), transparent 30%),
+      linear-gradient(180deg, rgba(22, 27, 34, 0.92), rgba(16, 22, 29, 0.95));
+  }
+
+  :global(body.dark) .divider-line {
+    stroke: rgba(240, 246, 252, 0.12);
+  }
+
+  :global(body.dark) .quadrant-label {
+    fill: rgba(230, 237, 243, 0.42);
+  }
+
+  :global(body.dark) .blip-label {
+    fill: rgba(230, 237, 243, 0);
+  }
+
+  :global(body.dark) .blip.hovered .blip-label {
+    fill: rgba(230, 237, 243, 0.85);
+  }
+
+  :global(body.dark) .project-count-dot {
+    fill: #e6edf3;
+  }
+
+  :global(body.dark) .project-count-text {
+    fill: #0d1117;
+  }
+
+  :global(body.dark) .bar-track {
+    background: rgba(240, 246, 252, 0.08);
+  }
+
+  :global(body.dark) .meter {
+    background: rgba(240, 246, 252, 0.08);
+  }
+
+  :global(body.dark) .empty-card,
+  :global(body.dark) .empty-inline {
+    border-color: rgba(240, 246, 252, 0.15);
+    background: rgba(22, 27, 34, 0.56);
+  }
+
+  :global(body.dark) .ghost-button {
+    background: rgba(22, 27, 34, 0.72);
+    border-color: var(--line);
+    color: var(--ink);
+  }
+
+  :global(body.dark) .chip-row span,
+  :global(body.dark) .tag-chip {
+    background: rgba(22, 27, 34, 0.78);
+    border-color: var(--line);
+    color: var(--ink);
+  }
+
+  :global(body.dark) .modal-overlay {
+    background: rgba(1, 4, 9, 0.65);
+  }
+
+  :global(body.dark) .modal-card {
+    box-shadow: 0 40px 90px rgba(0, 0, 0, 0.55);
+  }
+
+  :global(body.dark) .modal-panel {
+    background: rgba(22, 27, 34, 0.64);
+  }
+
+  :global(body.dark) .motion-callout {
+    background: rgba(22, 27, 34, 0.72);
+  }
+
+  :global(body.dark) .close-button {
+    background: rgba(240, 246, 252, 0.06);
+    color: var(--ink);
+  }
+
+  :global(body.dark) .signal-loader {
+    border-color: rgba(88, 166, 255, 0.12);
+    border-top-color: var(--accent);
+  }
+
+  :global(body.dark) .intel-hotspot-card,
+  :global(body.dark) .intel-similarity-card {
+    background: rgba(22, 27, 34, 0.54);
+  }
+
+  :global(body.dark) .intel-hotspot-card:hover {
+    border-color: rgba(88, 166, 255, 0.22);
+  }
+
+  :global(body.dark) .cb-pill {
+    background: rgba(240, 246, 252, 0.06);
+    color: var(--muted);
+  }
+
+  :global(body.dark) .cb-graph-canvas {
+    background: var(--panel);
+  }
+
+  :global(body.dark) .graph-label {
+    fill: var(--ink);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
+
+  :global(body.dark) .cb-node-detail {
+    background: var(--panel);
+  }
+
+  :global(body.dark) .cb-tech-chip {
+    background: rgba(240, 246, 252, 0.06);
+  }
+
+  :global(body.dark) .cb-file-project-header {
+    background: rgba(240, 246, 252, 0.03);
+  }
+
+  :global(body.dark) .cb-file-project-header:hover {
+    background: rgba(240, 246, 252, 0.06);
+  }
+
+  :global(body.dark) .cb-pattern-badge {
+    background: var(--panel);
+    border-color: var(--line);
+  }
+
+  :global(body.dark) .blip.hovered .blip-core {
+    filter: drop-shadow(0 10px 10px rgba(88, 166, 255, 0.35));
+  }
+
+  :global(body.dark) .ring-chip {
+    background: color-mix(in srgb, var(--ring-color), #0d1117 82%);
+  }
+
+  :global(body.dark) .signal-pill.good,
+  :global(body.dark) .risk-badge.healthy {
+    background: rgba(63, 185, 80, 0.15);
+    color: var(--good);
+  }
+
+  :global(body.dark) .signal-pill.watch,
+  :global(body.dark) .risk-badge.watch {
+    background: rgba(210, 153, 34, 0.15);
+    color: var(--watch);
+  }
+
+  :global(body.dark) .signal-pill.danger,
+  :global(body.dark) .risk-badge.critical {
+    background: rgba(248, 81, 73, 0.15);
+    color: var(--danger);
+  }
+
+  :global(body.dark) .signal-pill.neutral {
+    background: rgba(88, 166, 255, 0.12);
+    color: var(--accent);
+  }
+
+  :global(body.dark) .primary-button {
+    background: linear-gradient(135deg, #1f6feb, #3fb950);
+  }
+
+  :global(body.dark) .secondary-button {
+    background: rgba(88, 166, 255, 0.1);
+    border-color: rgba(88, 166, 255, 0.15);
+    color: var(--accent);
+  }
+
+  :global(body.dark) .form-error {
+    background: rgba(248, 81, 73, 0.12);
+    border-color: rgba(248, 81, 73, 0.18);
+  }
+
+  :global(body.dark) .graph-edge {
+    stroke: rgba(139, 148, 158, 0.3);
+  }
+  :global(body.dark) .graph-edge.highlighted {
+    stroke: var(--accent);
+  }
+
+  @media (max-width: 760px) {
+    .intel-eco-row {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
