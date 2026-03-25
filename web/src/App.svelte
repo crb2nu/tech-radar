@@ -54,6 +54,24 @@
     tags: string[];
   };
 
+  type ThemeMode = 'system' | 'light' | 'dark';
+
+  const THEME_STORAGE_KEY = 'tr-theme';
+
+  function canUseDOM() {
+    return typeof window !== 'undefined' && typeof document !== 'undefined';
+  }
+
+  function readStoredTheme(): ThemeMode {
+    if (!canUseDOM()) return 'system';
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
+  }
+
+  function systemPrefersDark() {
+    return canUseDOM() && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: 'overview', label: 'Command deck' },
     { id: 'radar', label: 'Radar' },
@@ -96,13 +114,27 @@
   let formTagsInput = $state('');
   let editEntryData = $state<EntryDraft>(emptyEntryDraft());
 
-  // Dark mode state
-  let isDark = $state(typeof localStorage !== 'undefined' && localStorage.getItem('tr-theme') === 'dark');
+  let themeMode = $state<ThemeMode>(readStoredTheme());
+  let prefersDark = $state(systemPrefersDark());
+  const isDark = $derived(themeMode === 'dark' || (themeMode === 'system' && prefersDark));
+  const activeThemeLabel = $derived(themeMode === 'system' ? (isDark ? 'System dark' : 'System light') : themeMode === 'dark' ? 'Dark mode' : 'Light mode');
+  const themeDescription = $derived(
+    themeMode === 'system'
+      ? 'Following your device appearance automatically.'
+      : themeMode === 'dark'
+        ? 'Dark mode stays on until you change it.'
+        : 'Light mode stays on until you change it.'
+  );
 
   $effect(() => {
+    if (!canUseDOM()) return;
     document.body.classList.toggle('dark', isDark);
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('tr-theme', isDark ? 'dark' : 'light');
+    document.body.dataset.theme = isDark ? 'dark' : 'light';
+    document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+    if (themeMode === 'system') {
+      window.localStorage.removeItem(THEME_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
     }
   });
 
@@ -144,6 +176,13 @@
   onMount(() => {
     void loadData();
 
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleThemeChange = (event: MediaQueryListEvent) => {
+      prefersDark = event.matches;
+    };
+    prefersDark = media.matches;
+    media.addEventListener('change', handleThemeChange);
+
     const handleKeydown = (event: KeyboardEvent) => {
       const isSearchShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k';
       if (isSearchShortcut) {
@@ -157,7 +196,10 @@
     };
 
     window.addEventListener('keydown', handleKeydown);
-    return () => window.removeEventListener('keydown', handleKeydown);
+    return () => {
+      media.removeEventListener('change', handleThemeChange);
+      window.removeEventListener('keydown', handleKeydown);
+    };
   });
 
   async function loadData() {
@@ -343,6 +385,10 @@
     return 'Steady';
   }
 
+  function setThemeMode(nextTheme: ThemeMode) {
+    themeMode = nextTheme;
+  }
+
   // --- Codebase graph helpers ---
   function startGraphSimulation() {
     if (!codebaseData) return;
@@ -375,8 +421,8 @@
 
   function onGraphMouseMove(event: MouseEvent) {
     if (!graphDragging) return;
-    const svg = (event.currentTarget as SVGSVGElement);
-    const rect = svg.getBoundingClientRect();
+    const canvas = event.currentTarget as HTMLDivElement;
+    const rect = canvas.getBoundingClientRect();
     const scaleX = 800 / rect.width;
     const scaleY = 560 / rect.height;
     graphDragging.fx = (event.clientX - rect.left) * scaleX;
@@ -512,13 +558,23 @@
         </section>
 
         <section class="sidebar-panel">
-          <label class="toggle-row">
-            <span>{isDark ? '🌙' : '☀️'} Dark mode</span>
-            <span class="toggle">
-              <input type="checkbox" bind:checked={isDark} />
-              <span></span>
-            </span>
-          </label>
+          <header>
+            <span class="eyebrow">Appearance</span>
+            <h3>{activeThemeLabel}</h3>
+          </header>
+          <div class="theme-segmented" role="group" aria-label="Sidebar color theme picker">
+            {#each ['system', 'light', 'dark'] as option}
+              <button
+                type="button"
+                class:active={themeMode === option}
+                aria-pressed={themeMode === option}
+                onclick={() => setThemeMode(option as ThemeMode)}
+              >
+                {option}
+              </button>
+            {/each}
+          </div>
+          <p class="sidebar-copy">{themeDescription}</p>
         </section>
       </aside>
 
@@ -541,6 +597,29 @@
           </div>
 
           <div class="hero-actions">
+            <section class="theme-card">
+              <div class="theme-card-header">
+                <div>
+                  <span class="eyebrow">Appearance</span>
+                  <strong>{activeThemeLabel}</strong>
+                </div>
+                <span class="theme-status-dot" class:is-dark={isDark} aria-hidden="true"></span>
+              </div>
+              <div class="theme-segmented" role="group" aria-label="Color theme picker">
+                {#each ['system', 'light', 'dark'] as option}
+                  <button
+                    type="button"
+                    class:active={themeMode === option}
+                    aria-pressed={themeMode === option}
+                    onclick={() => setThemeMode(option as ThemeMode)}
+                  >
+                    {option}
+                  </button>
+                {/each}
+              </div>
+              <p class="theme-copy">{themeDescription}</p>
+            </section>
+
             <label class="search-card">
               <span class="eyebrow">Search</span>
               <div class="search-shell">
@@ -1597,15 +1676,20 @@
                         </div>
                       {/if}
 
-                      <div class="cb-graph-canvas">
+                      <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
+                      <div
+                        class="cb-graph-canvas"
+                        role="application"
+                        aria-label="Technology dependency graph canvas"
+                        onmousemove={onGraphMouseMove}
+                        onmouseup={onGraphMouseUp}
+                        onmouseleave={onGraphMouseUp}
+                      >
                         <svg
                           viewBox="0 0 800 560"
                           class="dep-graph"
-                          role="application"
+                          role="img"
                           aria-label="Technology dependency graph"
-                          onmousemove={onGraphMouseMove}
-                          onmouseup={onGraphMouseUp}
-                          onmouseleave={onGraphMouseUp}
                         >
                           <defs>
                             <filter id="graph-glow">
@@ -2255,6 +2339,87 @@
     font-size: 0.92rem;
     line-height: 1.5;
     opacity: 0.76;
+  }
+
+  .theme-card {
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.76);
+    padding: 0.95rem 1rem 1rem;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .theme-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .theme-card-header strong {
+    display: block;
+    font-size: 1rem;
+    margin-top: 0.2rem;
+  }
+
+  .theme-status-dot {
+    width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 999px;
+    background: rgba(201, 122, 16, 0.75);
+    box-shadow: 0 0 0 0.35rem rgba(201, 122, 16, 0.12);
+    flex-shrink: 0;
+  }
+
+  .theme-status-dot.is-dark {
+    background: rgba(29, 78, 216, 0.82);
+    box-shadow: 0 0 0 0.35rem rgba(29, 78, 216, 0.14);
+  }
+
+  .theme-segmented {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .theme-segmented button {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(24, 36, 58, 0.05);
+    color: inherit;
+    padding: 0.58rem 0.75rem;
+    font-size: 0.84rem;
+    font-weight: 700;
+    text-transform: capitalize;
+    transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+  }
+
+  .theme-segmented button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(29, 78, 216, 0.24);
+  }
+
+  .theme-segmented button.active {
+    background: linear-gradient(135deg, rgba(29, 78, 216, 0.16), rgba(76, 199, 187, 0.22));
+    border-color: rgba(29, 78, 216, 0.32);
+  }
+
+  .theme-copy {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.5;
+    font-size: 0.92rem;
+  }
+
+  .sidebar .theme-segmented button {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .sidebar .theme-segmented button.active {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.24);
   }
 
   .workspace {
@@ -3543,9 +3708,31 @@
   }
 
   :global(body.dark) .search-card,
-  :global(body.dark) .toolbar {
+  :global(body.dark) .toolbar,
+  :global(body.dark) .theme-card {
     background: rgba(22, 27, 34, 0.76);
     border-color: var(--line);
+  }
+
+  :global(body.dark) .theme-status-dot {
+    background: rgba(210, 153, 34, 0.82);
+    box-shadow: 0 0 0 0.35rem rgba(210, 153, 34, 0.12);
+  }
+
+  :global(body.dark) .theme-status-dot.is-dark {
+    background: rgba(63, 185, 80, 0.9);
+    box-shadow: 0 0 0 0.35rem rgba(63, 185, 80, 0.14);
+  }
+
+  :global(body.dark) .theme-segmented button {
+    background: rgba(240, 246, 252, 0.04);
+    border-color: rgba(240, 246, 252, 0.08);
+    color: var(--ink);
+  }
+
+  :global(body.dark) .theme-segmented button.active {
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.18), rgba(63, 185, 80, 0.18));
+    border-color: rgba(88, 166, 255, 0.28);
   }
 
   :global(body.dark) .ring-section {
