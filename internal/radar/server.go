@@ -56,8 +56,20 @@ func (s *Server) Start() error {
 
 	mux := http.NewServeMux()
 
-	// Serve static files
-	mux.Handle("/", http.FileServer(http.FS(distFS)))
+	// Serve static files with proper cache control
+	staticHandler := http.FileServer(http.FS(distFS))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Prevent aggressive caching of the index HTML
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+		} else {
+			// Asset files (which have cache-buster hashes) can be cached long term
+			w.Header().Set("Cache-Control", "public, max-age=31536000")
+		}
+		staticHandler.ServeHTTP(w, r)
+	})
 
 	// API for radar data (Legacy compatibility)
 	mux.HandleFunc("/api/radar", s.handleRadarData)
