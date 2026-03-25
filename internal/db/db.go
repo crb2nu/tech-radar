@@ -71,10 +71,13 @@ func (d *DB) GetRadar(id string) (*types.Radar, error) {
 
 	for rows.Next() {
 		var e types.Entry
-		err := rows.Scan(&e.ID, &e.Name, &e.Quadrant, &e.Ring, &e.Description, &e.Moved, &e.Link, (*pq.StringArray)(&e.Tags))
+		var desc, link sql.NullString
+		err := rows.Scan(&e.ID, &e.Name, &e.Quadrant, &e.Ring, &desc, &e.Moved, &link, (*pq.StringArray)(&e.Tags))
 		if err != nil {
 			return nil, err
 		}
+		e.Description = desc.String
+		e.Link = link.String
 
 		// Fetch history for each entry
 		hRows, err := d.pool.Query(`
@@ -84,7 +87,10 @@ func (d *DB) GetRadar(id string) (*types.Radar, error) {
 		if err == nil {
 			for hRows.Next() {
 				var h types.HistoryEntry
-				if err := hRows.Scan(&h.Date, &h.Ring, &h.Reason, &h.Author); err == nil {
+				var reason, author sql.NullString
+				if err := hRows.Scan(&h.Date, &h.Ring, &reason, &author); err == nil {
+					h.Reason = reason.String
+					h.Author = author.String
 					e.History = append(e.History, h)
 				}
 			}
