@@ -176,6 +176,66 @@
   const hasActiveFilters = $derived(
     Boolean(searchQuery.trim()) || selectedQuadrant !== 'all' || selectedRing !== 'all' || selectedTag !== 'all'
   );
+  const activeFilterTokens = $derived([
+    searchQuery.trim() ? `Search: ${searchQuery.trim()}` : null,
+    selectedQuadrant !== 'all' ? `Quadrant: ${quadrantMeta[selectedQuadrant]?.label ?? selectedQuadrant}` : null,
+    selectedRing !== 'all' ? `Ring: ${ringMeta[selectedRing]?.label ?? selectedRing}` : null,
+    selectedTag !== 'all' ? `Tag: #${selectedTag}` : null
+  ].filter(Boolean) as string[]);
+  const activeViewSummary = $derived((() => {
+    if (activeTab === 'overview') {
+      return {
+        label: 'Portfolio pulse',
+        title: 'Start with the next governance call',
+        description: 'Triage the most urgent interventions, then work down into strategic follow-ups and project outliers.',
+        metric: `${dashboard.criticalRecommendations.length} urgent`,
+        detail: `${dashboard.strategicRecommendations.length} strategic follow-ups queued`
+      };
+    }
+    if (activeTab === 'radar') {
+      return {
+        label: 'Visual map',
+        title: 'Scan the portfolio before you drill in',
+        description: 'Use the radar to spot movement, hover for context, and jump straight into the decision card for any blip.',
+        metric: `${dashboard.renderableEntries.length} plotted`,
+        detail: `${dashboard.offCanvasEntries.length} off-canvas domains`
+      };
+    }
+    if (activeTab === 'projects') {
+      return {
+        label: 'Team alignment',
+        title: 'Compare project health side by side',
+        description: 'Review coverage, untracked technologies, and hold exposure to find teams that need the next governance nudge.',
+        metric: `${dashboard.filteredProjects.length} matching projects`,
+        detail: `${dashboard.projectSpotlight.length} spotlighted teams`
+      };
+    }
+    if (activeTab === 'insights') {
+      return {
+        label: 'Signal review',
+        title: 'Work the recommendation queue',
+        description: 'This lane ranks the technologies and decisions that need evidence, formal calls, or cleanup next.',
+        metric: `${dashboard.recommendations.length} live recommendations`,
+        detail: `${dashboard.aiMcpProjectCount} projects with AI or MCP traces`
+      };
+    }
+    if (activeTab === 'drift') {
+      return {
+        label: 'Risk watch',
+        title: 'Contain technologies that are drifting out of policy',
+        description: 'Focus the teams still shipping hold technologies and close the gap between standards and real usage.',
+        metric: `${dashboard.driftEntries.length} drift entries`,
+        detail: `${dashboard.driftLeaders.length} hold leaders in flight`
+      };
+    }
+    return {
+      label: 'Codebase map',
+      title: 'Inspect how the stack fits together',
+      description: 'Trace dependency clusters, compare project stacks, and review file-level signals across the scanned workspace.',
+      metric: `${codebaseData?.summary.total_technologies ?? 0} technologies`,
+      detail: `${codebaseData?.summary.total_projects ?? 0} projects indexed`
+    };
+  })());
 
   onMount(() => {
     void loadData();
@@ -604,37 +664,39 @@
           </div>
 
           <div class="hero-actions">
-            <section class="theme-card">
-              <div class="theme-card-header">
+            <section class="focus-card">
+              <div class="focus-card-header">
                 <div>
-                  <span class="eyebrow">Appearance</span>
-                  <strong>{activeThemeLabel}</strong>
+                  <span class="eyebrow">{activeViewSummary.label}</span>
+                  <strong>{activeViewSummary.title}</strong>
                 </div>
                 <span class="theme-status-dot" class:is-dark={isDark} aria-hidden="true"></span>
               </div>
-              <div class="theme-segmented" role="group" aria-label="Color theme picker">
-                {#each ['system', 'light', 'dark'] as option}
-                  <button
-                    type="button"
-                    class:active={themeMode === option}
-                    aria-pressed={themeMode === option}
-                    onclick={() => setThemeMode(option as ThemeMode)}
-                  >
-                    {option}
-                  </button>
-                {/each}
+              <p class="focus-copy">{activeViewSummary.description}</p>
+              <div class="focus-metrics" aria-label="Current view summary">
+                <span>{activeViewSummary.metric}</span>
+                <span>{activeViewSummary.detail}</span>
               </div>
-              <p class="theme-copy">{themeDescription}</p>
+              <div class="focus-actions">
+                <button class="primary-button" onclick={() => activeTab = 'overview'}>Action board</button>
+                <button class="ghost-button" onclick={() => activeTab = 'radar'}>Open radar</button>
+                <button class="ghost-button" onclick={() => activeTab = 'projects'}>Review projects</button>
+                <button class="ghost-button" onclick={() => activeTab = 'insights'}>AI / MCP lane</button>
+              </div>
             </section>
 
             <label class="search-card">
-              <span class="eyebrow">Search</span>
+              <div class="search-head">
+                <span class="eyebrow">Search</span>
+                <span class="search-meta">Jump straight to a technology, project, or tag</span>
+              </div>
               <div class="search-shell">
                 <input
                   bind:this={searchField}
                   bind:value={searchQuery}
                   type="text"
                   placeholder="React, GitOps, infra..."
+                  aria-label="Search technologies, projects, and tags"
                 />
                 <kbd>⌘K</kbd>
               </div>
@@ -675,6 +737,37 @@
             </div>
           </div>
         </header>
+
+        <section class="filter-summary" aria-label="Current filters and workspace status">
+          <div class="filter-summary-copy">
+            <span class="eyebrow">Current focus</span>
+            <strong>
+              {#if activeTab === 'projects'}
+                {dashboard.filteredProjects.length} projects in view
+              {:else if activeTab === 'codebase'}
+                {codebaseData?.summary.total_technologies ?? 0} technologies mapped
+              {:else if activeTab === 'insights'}
+                {dashboard.recommendations.length} active recommendations
+              {:else if activeTab === 'drift'}
+                {dashboard.driftEntries.length} drift entries need attention
+              {:else}
+                {dashboard.filteredEntries.length} radar entries in the current scope
+              {/if}
+            </strong>
+          </div>
+
+          <div class="filter-chip-row">
+            {#if hasActiveFilters}
+              {#each activeFilterTokens as token}
+                <span class="filter-chip">{token}</span>
+              {/each}
+            {:else}
+              <span class="filter-chip quiet">No filters applied. You're seeing the full portfolio.</span>
+            {/if}
+          </div>
+
+          <button class="ghost-button" onclick={clearFilters} disabled={!hasActiveFilters}>Clear filters</button>
+        </section>
 
         <section class="metric-grid">
           {#each dashboard.summaryMetrics as metric}
@@ -2182,6 +2275,14 @@
     cursor: pointer;
   }
 
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--accent) 30%, white);
+    outline-offset: 2px;
+  }
+
   .shell {
     min-height: 100vh;
   }
@@ -2379,7 +2480,8 @@
     opacity: 0.76;
   }
 
-  .theme-card {
+  .theme-card,
+  .focus-card {
     border: 1px solid var(--line);
     border-radius: 22px;
     background: rgba(255, 255, 255, 0.76);
@@ -2449,6 +2551,54 @@
     color: var(--muted);
     line-height: 1.5;
     font-size: 0.92rem;
+  }
+
+  .focus-card {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(247, 243, 236, 0.82)),
+      radial-gradient(circle at top right, rgba(76, 199, 187, 0.14), transparent 36%);
+  }
+
+  .focus-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.8rem;
+  }
+
+  .focus-card-header strong {
+    display: block;
+    font-size: 1.15rem;
+    line-height: 1.2;
+    margin-top: 0.25rem;
+  }
+
+  .focus-copy {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .focus-metrics,
+  .focus-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
+  .focus-metrics span {
+    padding: 0.5rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.78);
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .focus-actions .ghost-button,
+  .focus-actions .primary-button {
+    min-height: 2.75rem;
   }
 
   .sidebar .theme-segmented button {
@@ -2526,6 +2676,20 @@
     gap: 0.7rem;
   }
 
+  .search-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+
+  .search-meta {
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
   .search-shell {
     display: flex;
     align-items: center;
@@ -2554,7 +2718,7 @@
   .toolbar {
     padding: 0.8rem;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, auto);
     gap: 0.75rem;
     align-items: end;
   }
@@ -2596,6 +2760,52 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1rem;
     margin-top: 1rem;
+  }
+
+  .filter-summary {
+    margin-top: 1rem;
+    padding: 0.95rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.68);
+    box-shadow: var(--shadow);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.85rem;
+    align-items: center;
+  }
+
+  .filter-summary-copy {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  .filter-summary-copy strong {
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+
+  .filter-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.48rem 0.78rem;
+    border-radius: 999px;
+    background: rgba(24, 36, 58, 0.06);
+    border: 1px solid rgba(24, 36, 58, 0.08);
+    color: var(--ink);
+    font-size: 0.84rem;
+    font-weight: 600;
+  }
+
+  .filter-chip.quiet {
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.74);
   }
 
   .metric-card {
@@ -3348,6 +3558,9 @@
     .sidebar {
       position: static;
       height: auto;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
     }
 
     .hero,
@@ -3358,6 +3571,16 @@
 
     .metric-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .brand-block,
+    .nav-stack {
+      grid-column: 1 / -1;
+    }
+
+    .filter-summary {
+      grid-template-columns: 1fr;
+      align-items: start;
     }
 
     .ring-section-grid,
@@ -3372,6 +3595,12 @@
       padding: 1rem;
     }
 
+    .sidebar {
+      grid-template-columns: 1fr;
+      padding: 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
     .hero,
     .panel,
     .project-card,
@@ -3384,6 +3613,25 @@
     .toolbar,
     .metric-grid {
       grid-template-columns: 1fr;
+    }
+
+    .nav-stack {
+      display: flex;
+      overflow-x: auto;
+      padding: 0.5rem;
+      gap: 0.45rem;
+      scroll-snap-type: x proximity;
+    }
+
+    .nav-button {
+      min-width: max-content;
+      scroll-snap-align: start;
+    }
+
+    .search-head,
+    .focus-card-header,
+    .filter-summary-copy {
+      align-items: flex-start;
     }
 
     .panel-header,
@@ -3793,9 +4041,29 @@
 
   :global(body.dark) .search-card,
   :global(body.dark) .toolbar,
-  :global(body.dark) .theme-card {
+  :global(body.dark) .theme-card,
+  :global(body.dark) .focus-card,
+  :global(body.dark) .filter-summary {
     background: rgba(22, 27, 34, 0.76);
     border-color: var(--line);
+  }
+
+  :global(body.dark) .focus-card {
+    background:
+      linear-gradient(180deg, rgba(22, 27, 34, 0.94), rgba(20, 28, 38, 0.9)),
+      radial-gradient(circle at top right, rgba(63, 185, 80, 0.08), transparent 34%);
+  }
+
+  :global(body.dark) .focus-metrics span,
+  :global(body.dark) .filter-chip {
+    background: rgba(240, 246, 252, 0.06);
+    border-color: rgba(240, 246, 252, 0.08);
+    color: var(--ink);
+  }
+
+  :global(body.dark) .filter-chip.quiet {
+    color: var(--muted);
+    background: rgba(22, 27, 34, 0.7);
   }
 
   :global(body.dark) .theme-status-dot {
