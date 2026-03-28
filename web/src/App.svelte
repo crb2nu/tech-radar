@@ -36,14 +36,15 @@
     type DependencyHotspot,
     type EcosystemStat,
     type Entry,
-    type GovernanceRecommendation,
-    type Insights,
-    type MotionVector,
-    type PolyglotProfile,
-    type Project,
-    type Radar,
-    type StackSimilarity
-  } from './lib/dashboard';
+      type GovernanceRecommendation,
+      type Insights,
+      type MotionVector,
+      type PolyglotProfile,
+      type Project,
+      type SummaryMetric,
+      type Radar,
+      type StackSimilarity
+    } from './lib/dashboard';
 
   type Tab = 'overview' | 'radar' | 'projects' | 'insights' | 'drift' | 'codebase';
 
@@ -182,6 +183,12 @@
     selectedRing !== 'all' ? `Ring: ${ringMeta[selectedRing]?.label ?? selectedRing}` : null,
     selectedTag !== 'all' ? `Tag: #${selectedTag}` : null
   ].filter(Boolean) as string[]);
+  const headlineMetrics = $derived([
+    dashboard.summaryMetrics.find((metric) => metric.label === 'Action queue'),
+    dashboard.summaryMetrics.find((metric) => metric.label === 'Uncharted demand'),
+    dashboard.summaryMetrics.find((metric) => metric.label === 'Active drift'),
+    dashboard.summaryMetrics.find((metric) => metric.label === 'Radar coverage')
+  ].filter(Boolean) as SummaryMetric[]);
   const activeViewSummary = $derived((() => {
     if (activeTab === 'overview') {
       return {
@@ -624,25 +631,6 @@
           {/if}
         </section>
 
-        <section class="sidebar-panel">
-          <header>
-            <span class="eyebrow">Appearance</span>
-            <h3>{activeThemeLabel}</h3>
-          </header>
-          <div class="theme-segmented" role="group" aria-label="Sidebar color theme picker">
-            {#each ['system', 'light', 'dark'] as option}
-              <button
-                type="button"
-                class:active={themeMode === option}
-                aria-pressed={themeMode === option}
-                onclick={() => setThemeMode(option as ThemeMode)}
-              >
-                {option}
-              </button>
-            {/each}
-          </div>
-          <p class="sidebar-copy">{themeDescription}</p>
-        </section>
       </aside>
 
       <section class="workspace">
@@ -685,56 +673,85 @@
               </div>
             </section>
 
-            <label class="search-card">
-              <div class="search-head">
-                <span class="eyebrow">Search</span>
-                <span class="search-meta">Jump straight to a technology, project, or tag</span>
-              </div>
-              <div class="search-shell">
-                <input
-                  bind:this={searchField}
-                  bind:value={searchQuery}
-                  type="text"
-                  placeholder="React, GitOps, infra..."
-                  aria-label="Search technologies, projects, and tags"
-                />
-                <kbd>⌘K</kbd>
-              </div>
-            </label>
+            <section class="control-card" aria-label="Workspace controls">
+              <div class="control-bar">
+                <div class="control-copy">
+                  <span class="eyebrow">Workspace controls</span>
+                  <strong>Search, filter, and set the theme in one place</strong>
+                  <p>{themeDescription}</p>
+                </div>
 
-            <div class="toolbar">
-              <label>
-                <span>Quadrant</span>
-                <select bind:value={selectedQuadrant}>
-                  <option value="all">All</option>
-                  {#each allQuadrants as quadrant}
-                    <option value={quadrant}>{quadrantMeta[quadrant]?.label ?? quadrant}</option>
-                  {/each}
-                </select>
+                <div class="theme-inline">
+                  <div class="theme-inline-copy">
+                    <span class="eyebrow">Appearance</span>
+                    <strong>{activeThemeLabel}</strong>
+                  </div>
+                  <div class="theme-segmented" role="group" aria-label="Color theme picker">
+                    {#each ['system', 'light', 'dark'] as option}
+                      <button
+                        type="button"
+                        class:active={themeMode === option}
+                        aria-pressed={themeMode === option}
+                        onclick={() => setThemeMode(option as ThemeMode)}
+                      >
+                        {option}
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              </div>
+
+              <label class="search-card compact-card">
+                <div class="search-head">
+                  <span class="eyebrow">Search</span>
+                  <span class="search-meta">Jump straight to a technology, project, or tag</span>
+                </div>
+                <div class="search-shell">
+                  <input
+                    bind:this={searchField}
+                    bind:value={searchQuery}
+                    type="text"
+                    placeholder="React, GitOps, infra..."
+                    aria-label="Search technologies, projects, and tags"
+                  />
+                  <kbd>⌘K</kbd>
+                </div>
               </label>
-              <label>
-                <span>Ring</span>
-                <select bind:value={selectedRing}>
-                  <option value="all">All</option>
-                  {#each ringOrder as ring}
-                    <option value={ring}>{ringMeta[ring].label}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                <span>Tag</span>
-                <select bind:value={selectedTag}>
-                  <option value="all">All</option>
-                  {#each allTags as tag}
-                    <option value={tag}>{tag}</option>
-                  {/each}
-                </select>
-              </label>
-              <button class="ghost-button" onclick={() => activeTab = 'insights'}>
-                AI / MCP watch
-              </button>
-              <button class="ghost-button" onclick={clearFilters} disabled={!hasActiveFilters}>Reset</button>
-            </div>
+
+              <div class="toolbar compact-card">
+                <label>
+                  <span>Quadrant</span>
+                  <select bind:value={selectedQuadrant}>
+                    <option value="all">All</option>
+                    {#each allQuadrants as quadrant}
+                      <option value={quadrant}>{quadrantMeta[quadrant]?.label ?? quadrant}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>Ring</span>
+                  <select bind:value={selectedRing}>
+                    <option value="all">All</option>
+                    {#each ringOrder as ring}
+                      <option value={ring}>{ringMeta[ring].label}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>Tag</span>
+                  <select bind:value={selectedTag}>
+                    <option value="all">All</option>
+                    {#each allTags as tag}
+                      <option value={tag}>{tag}</option>
+                    {/each}
+                  </select>
+                </label>
+                <button class="ghost-button" onclick={() => activeTab = 'insights'}>
+                  AI / MCP watch
+                </button>
+                <button class="ghost-button" onclick={clearFilters} disabled={!hasActiveFilters}>Reset</button>
+              </div>
+            </section>
           </div>
         </header>
 
@@ -770,7 +787,7 @@
         </section>
 
         <section class="metric-grid">
-          {#each dashboard.summaryMetrics as metric}
+          {#each headlineMetrics as metric}
             <article class="metric-card" data-tone={metric.tone}>
               <span class="eyebrow">{metric.label}</span>
               <strong>{metric.value}</strong>
@@ -781,7 +798,7 @@
 
         <section class="content-scroll">
           {#if activeTab === 'overview'}
-            <div class="page-grid" in:fade>
+            <div class="page-grid overview-grid" in:fade>
               <article class="panel panel-large">
                 <div class="panel-header">
                   <div>
@@ -834,16 +851,21 @@
                 </div>
               </article>
 
-              <article class="panel">
+              <article class="panel overview-rail">
                 <div class="panel-header">
                   <div>
-                    <span class="eyebrow">Portfolio balance</span>
-                    <h2>How the radar is distributed</h2>
+                    <span class="eyebrow">Signal ledger</span>
+                    <h2>Context behind the next governance call</h2>
                   </div>
+                  <p>Keep the summary tight here, then jump into the deeper tabs when a signal needs a full review.</p>
                 </div>
 
-                <div class="breakdown-stack">
-                  <section>
+                <div class="overview-rail-sections">
+                  <section class="overview-subsection">
+                    <div class="overview-subsection-header">
+                      <h3>Portfolio balance</h3>
+                      <span class="muted">{dashboard.techCount} tracked decisions</span>
+                    </div>
                     <h3>By ring</h3>
                     {#each dashboard.ringBreakdown as stat}
                       <div class="bar-row">
@@ -854,9 +876,7 @@
                         <strong>{stat.count}</strong>
                       </div>
                     {/each}
-                  </section>
 
-                  <section>
                     <h3>By quadrant</h3>
                     {#each dashboard.quadrantBreakdown as stat}
                       <div class="bar-row">
@@ -868,219 +888,157 @@
                       </div>
                     {/each}
                   </section>
+
+                  <section class="overview-subsection">
+                    <div class="overview-subsection-header">
+                      <h3>AI / MCP frontier</h3>
+                      <button class="ghost-button subtle-button" onclick={() => activeTab = 'insights'}>Open lane</button>
+                    </div>
+
+                    {#if dashboard.aiMcpOpportunityQueue.length > 0}
+                      <div class="signal-stack">
+                        {#each dashboard.aiMcpOpportunityQueue.slice(0, 3) as item}
+                          <button class="signal-row actionable" onclick={() => {
+                            if (isAdminMode) {
+                              openEntryForm(null, item.name);
+                            } else {
+                              searchQuery = item.name;
+                              activeTab = 'insights';
+                            }
+                          }}>
+                            <div>
+                              <strong>{item.name}</strong>
+                              <span>{item.count} projects are already experimenting without a radar call.</span>
+                            </div>
+                            <span class="signal-pill watch">{item.count}</span>
+                          </button>
+                        {/each}
+                      </div>
+                    {:else if dashboard.aiMcpAdoptionLeaders.length > 0}
+                      <div class="signal-stack">
+                        {#each dashboard.aiMcpAdoptionLeaders.slice(0, 3) as item}
+                          <div class="signal-row">
+                            <div>
+                              <strong>{item.name}</strong>
+                              <span>Tracked agentic tooling already present in {item.count} monitored projects.</span>
+                            </div>
+                            <span class="signal-pill good">{item.count}</span>
+                          </div>
+                        {/each}
+                      </div>
+                    {:else}
+                      <div class="empty-card">No AI or MCP signals are showing up in scans yet.</div>
+                    {/if}
+                  </section>
+
+                  <section class="overview-subsection">
+                    <div class="overview-subsection-header">
+                      <h3>Lifecycle motion</h3>
+                      <span class="muted">{dashboard.motionEntries.length} entries scored</span>
+                    </div>
+
+                    {#if dashboard.motionEntries.length > 0}
+                      <div class="signal-stack">
+                        {#each dashboard.motionEntries.slice(0, 3) as motion}
+                          <button class="signal-row actionable" onclick={() => {
+                            openEntryById(motion.entryId);
+                            activeTab = 'insights';
+                          }}>
+                            <div>
+                              <strong>{motion.name}</strong>
+                              <span>{motion.summary}</span>
+                            </div>
+                            <span class={`signal-pill ${motionTone(motion)}`}>{motionLabel(motion)}</span>
+                          </button>
+                        {/each}
+                      </div>
+                    {:else}
+                      <div class="empty-card">No entries have enough movement history to score motion yet.</div>
+                    {/if}
+                  </section>
+
+                  <section class="overview-subsection">
+                    <div class="overview-subsection-header">
+                      <h3>Recent movement</h3>
+                      <span class="muted">{dashboard.recentMoves.length} recorded changes</span>
+                    </div>
+
+                    {#if dashboard.recentMoves.length > 0}
+                      <div class="timeline-list">
+                        {#each dashboard.recentMoves.slice(0, 4) as move}
+                          <div class="timeline-item">
+                            <div class="timeline-dot" style={`--dot-color:${ringMeta[move.to_ring]?.accent ?? '#1d4ed8'}`}></div>
+                            <div>
+                              <strong>{move.name}</strong>
+                              <p>
+                                {move.from_ring ? `${move.from_ring.toUpperCase()} -> ${move.to_ring.toUpperCase()}` : `Entered ${move.to_ring.toUpperCase()}`}
+                                {' '}on {formatDate(move.date)}
+                              </p>
+                              {#if move.reason}
+                                <span>{move.reason}</span>
+                              {/if}
+                            </div>
+                          </div>
+                        {/each}
+                      </div>
+                    {:else}
+                      <div class="empty-card">No movement history yet. New ring changes will start building a governance timeline.</div>
+                    {/if}
+                  </section>
                 </div>
               </article>
 
-              <article class="panel panel-large">
+              <article class="panel panel-wide">
                 <div class="panel-header">
                   <div>
                     <span class="eyebrow">Project spotlight</span>
-                    <h2>Which teams are aligned and which need attention</h2>
+                    <h2>Which teams need the next governance nudge</h2>
                   </div>
                   <button class="ghost-button" onclick={() => activeTab = 'projects'}>View all projects</button>
                 </div>
 
-                <div class="project-grid">
-                  {#each dashboard.projectSpotlight as project}
-                    <button class="project-card" data-risk={project.riskLevel} onclick={() => {
-                      searchQuery = project.name;
-                      activeTab = 'projects';
-                    }}>
-                      <div class="project-card-header">
-                        <div>
-                          <h3>{project.name}</h3>
-                          <p>Last scan {formatRelativeDate(project.last_scan)}</p>
-                        </div>
-                        <span class={`risk-badge ${project.riskLevel}`}>{riskLabel(project.riskLevel)}</span>
-                      </div>
-                      <div class="score-row">
-                        <strong>{project.radarAlignmentScore}</strong>
-                        <span>alignment score</span>
-                      </div>
-                      <div class="meter">
-                        <div class="meter-fill" style={`width:${project.coveragePercent}%`}></div>
-                      </div>
-                      <div class="project-metrics">
-                        <span>{project.coveragePercent.toFixed(1)}% covered</span>
-                        <span>{project.untrackedTechs} uncharted</span>
-                        <span>{project.holdTechs} hold</span>
-                      </div>
-                      <div class="chip-row">
-                        {#each project.topTechs as tech}
-                          <span>{tech}</span>
-                        {/each}
-                      </div>
-                    </button>
-                  {/each}
-                </div>
-              </article>
-
-              <article class="panel">
-                <div class="panel-header">
-                  <div>
-                    <span class="eyebrow">AI / MCP watch</span>
-                    <h2>Agentic tooling needing decisions</h2>
-                  </div>
-                  <p>{dashboard.aiMcpProjectCount} projects show AI or MCP signals.</p>
-                </div>
-
-                <div class="signal-stack">
-                  {#if dashboard.aiMcpOpportunityQueue.length > 0}
-                    {#each dashboard.aiMcpOpportunityQueue.slice(0, 4) as item}
-                      <button class="signal-row actionable" onclick={() => {
-                        if (isAdminMode) {
-                          openEntryForm(null, item.name);
-                        } else {
-                          searchQuery = item.name;
-                          activeTab = 'insights';
-                        }
+                {#if dashboard.projectSpotlight.length > 0}
+                  <div class="project-spotlight-list">
+                    {#each dashboard.projectSpotlight.slice(0, 4) as project}
+                      <button class="project-row actionable" data-risk={project.riskLevel} onclick={() => {
+                        searchQuery = project.name;
+                        activeTab = 'projects';
                       }}>
-                        <div>
-                          <strong>{item.name}</strong>
-                          <span>{item.count} projects are already experimenting without a radar call.</span>
-                        </div>
-                        <span class="signal-pill watch">{item.count}</span>
-                      </button>
-                    {/each}
-                  {:else if dashboard.aiMcpAdoptionLeaders.length > 0}
-                    {#each dashboard.aiMcpAdoptionLeaders.slice(0, 4) as item}
-                      <div class="signal-row">
-                        <div>
-                          <strong>{item.name}</strong>
-                          <span>Tracked agentic tooling already present in {item.count} monitored projects.</span>
-                        </div>
-                        <span class="signal-pill good">{item.count}</span>
-                      </div>
-                    {/each}
-                  {:else}
-                    <div class="empty-card">No AI or MCP signals are showing up in scans yet.</div>
-                  {/if}
-                </div>
-              </article>
-
-              <article class="panel">
-                <div class="panel-header">
-                  <div>
-                    <span class="eyebrow">Lifecycle motion</span>
-                    <h2>What is heating up and what is cooling down</h2>
-                  </div>
-                  <p>{dashboard.motionEntries.length} entries have enough history to score movement.</p>
-                </div>
-
-                {#if dashboard.motionEntries.length > 0}
-                  <div class="signal-stack">
-                    {#each dashboard.motionEntries.slice(0, 4) as motion}
-                      <button class="signal-row actionable" onclick={() => {
-                        openEntryById(motion.entryId);
-                        activeTab = 'insights';
-                      }}>
-                        <div>
-                          <strong>{motion.name}</strong>
-                          <span>{motion.summary}</span>
-                        </div>
-                        <span class={`signal-pill ${motionTone(motion)}`}>{motionLabel(motion)}</span>
-                      </button>
-                    {/each}
-                  </div>
-                {:else}
-                  <div class="empty-card">No entries have enough movement history to score motion yet.</div>
-                {/if}
-              </article>
-
-              <article class="panel">
-                <div class="panel-header">
-                  <div>
-                    <span class="eyebrow">Decision evidence</span>
-                    <h2>ADR-backed radar calls</h2>
-                  </div>
-                </div>
-
-                {#if dashboard.adrEntries.length > 0}
-                  <div class="signal-stack">
-                    {#each dashboard.adrEntries.slice(0, 4) as entry}
-                      <button class="signal-row actionable" onclick={() => selectedEntry = entry}>
-                        <div>
-                          <strong>{entry.name}</strong>
-                          <span>{entry.link}</span>
-                        </div>
-                        <span class="signal-pill good">ADR</span>
-                      </button>
-                    {/each}
-                  </div>
-                {:else}
-                  <div class="empty-card">No radar entries are linked to ADR evidence yet.</div>
-                {/if}
-              </article>
-
-              <article class="panel">
-                <div class="panel-header">
-                  <div>
-                    <span class="eyebrow">Decision ledger</span>
-                    <h2>Recent movement</h2>
-                  </div>
-                </div>
-
-                {#if dashboard.recentMoves.length > 0}
-                  <div class="timeline-list">
-                    {#each dashboard.recentMoves.slice(0, 6) as move}
-                      <div class="timeline-item">
-                        <div class="timeline-dot" style={`--dot-color:${ringMeta[move.to_ring]?.accent ?? '#1d4ed8'}`}></div>
-                        <div>
-                          <strong>{move.name}</strong>
-                          <p>
-                            {move.from_ring ? `${move.from_ring.toUpperCase()} -> ${move.to_ring.toUpperCase()}` : `Entered ${move.to_ring.toUpperCase()}`}
-                            on {formatDate(move.date)}
-                          </p>
-                          {#if move.reason}
-                            <span>{move.reason}</span>
-                          {/if}
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                {:else}
-                  <div class="empty-card">No movement history yet. New ring changes will start building a governance timeline.</div>
-                {/if}
-              </article>
-
-              <article class="panel">
-                <div class="panel-header">
-                  <div>
-                    <span class="eyebrow">Signal sources</span>
-                    <h2>Where intelligence is coming from</h2>
-                  </div>
-                </div>
-
-                <div class="breakdown-stack compact">
-                  <section>
-                    <h3>Scan sources</h3>
-                    {#if dashboard.sourceBreakdown.length > 0}
-                      {#each dashboard.sourceBreakdown as stat}
-                        <div class="bar-row">
-                          <span>{stat.label}</span>
-                          <div class="bar-track">
-                            <div class="bar-fill neutral" style={`width:${Math.max(10, (stat.count / Math.max(1, dashboard.projectCount * 6)) * 100)}%`}></div>
+                        <div class="project-row-head">
+                          <div>
+                            <h3>{project.name}</h3>
+                            <p>Last scan {formatRelativeDate(project.last_scan)}</p>
                           </div>
-                          <strong>{stat.count}</strong>
+                          <span class={`risk-badge ${project.riskLevel}`}>{riskLabel(project.riskLevel)}</span>
                         </div>
-                      {/each}
-                    {:else}
-                      <div class="empty-card">No project scan sources detected yet.</div>
-                    {/if}
-                  </section>
-                  <section>
-                    <h3>Most used tags</h3>
-                    <div class="chip-cloud">
-                      {#if dashboard.topTags.length > 0}
-                        {#each dashboard.topTags as tag}
-                          <span class="tag-chip">#{tag.name} <strong>{tag.count}</strong></span>
-                        {/each}
-                      {:else}
-                        <span class="empty-inline">No governance tags recorded yet.</span>
-                      {/if}
-                    </div>
-                  </section>
-                </div>
+
+                        <div class="project-row-summary">
+                          <div class="score-row compact">
+                            <strong>{project.radarAlignmentScore}</strong>
+                            <span>alignment score</span>
+                          </div>
+                          <div class="project-row-metrics">
+                            <span>{project.coveragePercent.toFixed(1)}% covered</span>
+                            <span>{project.untrackedTechs} uncharted</span>
+                            <span>{project.holdTechs} hold</span>
+                          </div>
+                        </div>
+
+                        <div class="meter">
+                          <div class="meter-fill" style={`width:${project.coveragePercent}%`}></div>
+                        </div>
+
+                        <div class="chip-row">
+                          {#each project.topTechs as tech}
+                            <span>{tech}</span>
+                          {/each}
+                        </div>
+                      </button>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="empty-card">No projects match the current search. Try clearing filters.</div>
+                {/if}
               </article>
             </div>
           {/if}
@@ -2481,7 +2439,8 @@
   }
 
   .theme-card,
-  .focus-card {
+  .focus-card,
+  .control-card {
     border: 1px solid var(--line);
     border-radius: 22px;
     background: rgba(255, 255, 255, 0.76);
@@ -2495,12 +2454,6 @@
     justify-content: space-between;
     align-items: center;
     gap: 0.8rem;
-  }
-
-  .theme-card-header strong {
-    display: block;
-    font-size: 1rem;
-    margin-top: 0.2rem;
   }
 
   .theme-status-dot {
@@ -2559,6 +2512,57 @@
       radial-gradient(circle at top right, rgba(76, 199, 187, 0.14), transparent 36%);
   }
 
+  .control-card {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(249, 245, 238, 0.84)),
+      radial-gradient(circle at top right, rgba(29, 78, 216, 0.08), transparent 30%);
+  }
+
+  .control-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .control-copy {
+    display: grid;
+    gap: 0.35rem;
+    max-width: 26rem;
+  }
+
+  .control-copy strong,
+  .theme-inline-copy strong {
+    display: block;
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+
+  .control-copy p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+
+  .theme-inline {
+    display: grid;
+    gap: 0.65rem;
+    min-width: min(100%, 22rem);
+  }
+
+  .theme-inline-copy {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.9rem;
+  }
+
+  .compact-card {
+    border-radius: 18px;
+  }
+
   .focus-card-header {
     display: flex;
     justify-content: space-between;
@@ -2599,16 +2603,6 @@
   .focus-actions .ghost-button,
   .focus-actions .primary-button {
     min-height: 2.75rem;
-  }
-
-  .sidebar .theme-segmented button {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.12);
-  }
-
-  .sidebar .theme-segmented button.active {
-    background: rgba(255, 255, 255, 0.18);
-    border-color: rgba(255, 255, 255, 0.24);
   }
 
   .workspace {
@@ -2819,7 +2813,7 @@
   }
 
   .metric-card strong {
-    font-size: 2rem;
+    font-size: 1.75rem;
     letter-spacing: -0.04em;
   }
 
@@ -2851,6 +2845,10 @@
     grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.95fr);
     gap: 1rem;
     align-items: start;
+  }
+
+  .overview-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.92fr);
   }
 
   .radar-page {
@@ -2893,6 +2891,34 @@
     line-height: 1.5;
   }
 
+  .overview-rail-sections,
+  .project-spotlight-list {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .overview-subsection {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .overview-subsection + .overview-subsection {
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .overview-subsection-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .overview-subsection-header h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
   .queue-grid,
   .breakdown-stack,
   .signal-stack,
@@ -2912,7 +2938,7 @@
     gap: 0.7rem;
   }
 
-  .breakdown-stack h3,
+  .overview-subsection h3,
   .ring-section h3,
   .modal-panel h3 {
     margin: 0;
@@ -2995,6 +3021,13 @@
     color: var(--danger);
   }
 
+  .subtle-button {
+    min-height: auto;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+  }
+
   .breakdown-stack {
     gap: 1.15rem;
   }
@@ -3050,6 +3083,17 @@
     text-align: left;
   }
 
+  .project-row {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.68);
+    padding: 1rem 1.1rem;
+    text-align: left;
+    display: grid;
+    gap: 0.85rem;
+  }
+
   .project-card {
     display: grid;
     gap: 0.85rem;
@@ -3060,6 +3104,14 @@
   }
 
   .project-card[data-risk="watch"] {
+    border-color: rgba(201, 122, 16, 0.22);
+  }
+
+  .project-row[data-risk="critical"] {
+    border-color: rgba(180, 35, 24, 0.24);
+  }
+
+  .project-row[data-risk="watch"] {
     border-color: rgba(201, 122, 16, 0.22);
   }
 
@@ -3084,6 +3136,47 @@
   .score-row span {
     color: var(--muted);
     margin-top: 0.45rem;
+  }
+
+  .project-row-head,
+  .project-row-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .project-row h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .project-row p {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  .project-row-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.55rem 0.9rem;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  .score-row.compact {
+    align-items: baseline;
+    gap: 0.65rem;
+  }
+
+  .score-row.compact strong {
+    font-size: 1.65rem;
+  }
+
+  .score-row.compact span {
+    margin-top: 0;
   }
 
   .meter {
@@ -3630,7 +3723,11 @@
 
     .search-head,
     .focus-card-header,
-    .filter-summary-copy {
+    .filter-summary-copy,
+    .control-bar,
+    .theme-inline-copy,
+    .project-row-head,
+    .project-row-summary {
       align-items: flex-start;
     }
 
@@ -3642,6 +3739,10 @@
     .score-row,
     .entry-card-top {
       flex-direction: column;
+    }
+
+    .project-row-metrics {
+      justify-content: flex-start;
     }
 
     .split-grid {
@@ -4042,6 +4143,7 @@
   :global(body.dark) .search-card,
   :global(body.dark) .toolbar,
   :global(body.dark) .theme-card,
+  :global(body.dark) .control-card,
   :global(body.dark) .focus-card,
   :global(body.dark) .filter-summary {
     background: rgba(22, 27, 34, 0.76);
@@ -4052,6 +4154,12 @@
     background:
       linear-gradient(180deg, rgba(22, 27, 34, 0.94), rgba(20, 28, 38, 0.9)),
       radial-gradient(circle at top right, rgba(63, 185, 80, 0.08), transparent 34%);
+  }
+
+  :global(body.dark) .control-card {
+    background:
+      linear-gradient(180deg, rgba(22, 27, 34, 0.94), rgba(17, 24, 34, 0.9)),
+      radial-gradient(circle at top right, rgba(88, 166, 255, 0.08), transparent 32%);
   }
 
   :global(body.dark) .focus-metrics span,
@@ -4151,6 +4259,10 @@
     background: rgba(22, 27, 34, 0.78);
     border-color: var(--line);
     color: var(--ink);
+  }
+
+  :global(body.dark) .project-row {
+    background: rgba(22, 27, 34, 0.72);
   }
 
   :global(body.dark) .modal-overlay {
