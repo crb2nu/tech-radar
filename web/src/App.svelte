@@ -3,6 +3,7 @@
   import { fade, fly } from 'svelte/transition';
   import {
     fetchCodebaseAnalysis,
+    findingSeverityTone,
     getGraphView,
     initGraph,
     tickSimulation,
@@ -15,8 +16,10 @@
     shouldShowGraphLabel,
     CATEGORY_LABELS,
     type CodebaseAnalysis,
+    type FindingEvidence,
     type GraphDensityMode,
     type GraphNode,
+    type ProjectFinding,
     type DependencyEdge as GraphEdge,
   } from './lib/codebase';
   import {
@@ -36,15 +39,16 @@
     type DependencyHotspot,
     type EcosystemStat,
     type Entry,
-      type GovernanceRecommendation,
-      type Insights,
-      type MotionVector,
-      type PolyglotProfile,
-      type Project,
-      type SummaryMetric,
-      type Radar,
-      type StackSimilarity
-    } from './lib/dashboard';
+    type GovernanceRecommendation,
+    type Insights,
+    type MotionVector,
+    type PolyglotProfile,
+    type Project,
+    type ProjectIntelligence,
+    type SummaryMetric,
+    type Radar,
+    type StackSimilarity
+  } from './lib/dashboard';
 
   type Tab = 'overview' | 'radar' | 'projects' | 'insights' | 'drift' | 'codebase';
 
@@ -109,6 +113,7 @@
   let selectedTag = $state('all');
   let hoveredEntry = $state<string | null>(null);
   let selectedEntry = $state<Entry | null>(null);
+  let selectedProject = $state<ProjectIntelligence | null>(null);
   let activeTab = $state<Tab>('overview');
 
   let isAdminMode = $state(false);
@@ -172,6 +177,29 @@
   const selectedEntryMotion = $derived(selectedEntry ? entryMotion(selectedEntry) : null);
   const selectedEntryRecommendation = $derived(
     selectedEntry ? recommendationByEntryId.get(selectedEntry.id) ?? null : null
+  );
+  const findingsByProjectName = $derived((() => {
+    const output = new Map<string, ProjectFinding[]>();
+    for (const finding of codebaseData?.findings ?? []) {
+      const key = finding.project.name.toLowerCase();
+      const bucket = output.get(key) ?? [];
+      bucket.push(finding);
+      output.set(key, bucket);
+    }
+    return output;
+  })());
+  const selectedProjectFindings = $derived(
+    selectedProject ? findingsByProjectName.get(selectedProject.name.toLowerCase()) ?? [] : []
+  );
+  const selectedProjectPatterns = $derived((() => {
+    const project = selectedProject;
+    if (!project) return [];
+    return codebaseData?.stacks.find((stack) => stack.project_name.toLowerCase() === project.name.toLowerCase())?.patterns ?? [];
+  })());
+  const selectedProjectEvidence = $derived(
+    selectedProject
+      ? (selectedProject.observations?.length ? selectedProject.observations : selectedProject.technologies ?? [])
+      : []
   );
 
   const hasActiveFilters = $derived(
@@ -263,6 +291,7 @@
       if (event.key === 'Escape') {
         if (showEntryForm) showEntryForm = false;
         if (selectedEntry) selectedEntry = null;
+        if (selectedProject) selectedProject = null;
       }
     };
 
@@ -344,11 +373,32 @@
   }
 
   function openEntryById(entryId: string) {
+    selectedProject = null;
     selectedEntry = radar?.entries.find((entry) => entry.id === entryId) ?? null;
+  }
+
+  function openProjectIntelligence(projectName: string) {
+    const project = dashboard.allProjects.find((item) => item.name.toLowerCase() === projectName.toLowerCase()) ?? null;
+    if (!project) return;
+    selectedEntry = null;
+    selectedProject = project;
+    activeTab = 'projects';
   }
 
   function entryMotion(entry: Entry): MotionVector {
     return motionByEntryId.get(entry.id) ?? getEntryMotion(entry);
+  }
+
+  function findingLabel(finding: ProjectFinding) {
+    return finding.kind === 'anti_pattern' ? 'Warning' : 'Pattern';
+  }
+
+  function findingConfidence(finding: ProjectFinding) {
+    return `${Math.round(finding.confidence * 100)}% confidence`;
+  }
+
+  function evidenceSummary(item: FindingEvidence) {
+    return item.evidence_title || item.evidence_path || item.source;
   }
 
   function applyRecommendation(recommendation: GovernanceRecommendation) {
@@ -1001,8 +1051,7 @@
                   <div class="project-spotlight-list">
                     {#each dashboard.projectSpotlight.slice(0, 4) as project}
                       <button class="project-row actionable" data-risk={project.riskLevel} onclick={() => {
-                        searchQuery = project.name;
-                        activeTab = 'projects';
+                        openProjectIntelligence(project.name);
                       }}>
                         <div class="project-row-head">
                           <div>
@@ -1229,7 +1278,12 @@
                 {#if dashboard.filteredProjects.length > 0}
                   <div class="project-grid project-grid-wide">
                     {#each dashboard.filteredProjects as project}
-                      <article class="project-card" data-risk={project.riskLevel}>
+                      <button
+                        type="button"
+                        class="project-card actionable"
+                        data-risk={project.riskLevel}
+                        onclick={() => openProjectIntelligence(project.name)}
+                      >
                         <div class="project-card-header">
                           <div>
                             <h3>{project.name}</h3>
@@ -1259,7 +1313,7 @@
                             <span>{tech}</span>
                           {/each}
                         </div>
-                      </article>
+                      </button>
                     {/each}
                   </div>
                 {:else}
@@ -1754,11 +1808,16 @@
                       {#if codebaseData.patterns.length > 0}
                         <div class="cb-pattern-strip">
                           {#each codebaseData.patterns as pat}
-                            <span class="cb-pattern-badge" title={pat.signal}>
+                            <button
+                              type="button"
+                              class="cb-pattern-badge cb-pattern-button"
+                              title={pat.signal}
+                              onclick={() => openProjectIntelligence(pat.projects[0] ?? '')}
+                            >
                               <span>{pat.icon}</span>
                               <span>{pat.pattern}</span>
                               <strong>{pat.projects.length}</strong>
-                            </span>
+                            </button>
                           {/each}
                         </div>
                       {/if}
@@ -1887,7 +1946,9 @@
                         {#each codebaseData.stacks as stack}
                           <div class="cb-stack-row">
                             <div class="cb-stack-project-col">
-                              <strong>{stack.project_name}</strong>
+                              <button type="button" class="ghost-button subtle-button" onclick={() => openProjectIntelligence(stack.project_name)}>
+                                {stack.project_name}
+                              </button>
                               <div class="chip-row">
                                 {#each (stack.patterns ?? []) as pat}
                                   <span class="cb-mini-badge" title={pat}>{patternIcon(pat)}</span>
@@ -2081,6 +2142,140 @@
               </div>
             {:else}
               <p class="muted">No history has been logged yet for this decision.</p>
+            {/if}
+          </article>
+        </section>
+      </div>
+    </div>
+  {/if}
+
+  {#if selectedProject}
+    <div
+      class="modal-overlay"
+      transition:fade
+      role="button"
+      tabindex="0"
+      onclick={() => selectedProject = null}
+      onkeydown={(event) => {
+        if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          selectedProject = null;
+        }
+      }}
+    >
+      <div
+        class="modal-card"
+        transition:fly={{ y: 24, duration: 220 }}
+        role="dialog"
+        aria-modal="true"
+        tabindex="0"
+        onclick={(event) => event.stopPropagation()}
+        onkeydown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            selectedProject = null;
+          } else {
+            event.stopPropagation();
+          }
+        }}
+      >
+        <button class="close-button" onclick={() => selectedProject = null} aria-label="Close project detail panel">×</button>
+
+        <header class="modal-header">
+          <div>
+            <span class="eyebrow">Project intelligence</span>
+            <h2>{selectedProject.name}</h2>
+            <p>Scanned {formatRelativeDate(selectedProject.last_scan)} with {selectedProject.totalTechs} observed technologies.</p>
+          </div>
+          <div class="modal-actions">
+            <span class={`risk-badge ${selectedProject.riskLevel}`}>{riskLabel(selectedProject.riskLevel)}</span>
+            <span class="cb-pill">{selectedProject.radarAlignmentScore} alignment</span>
+          </div>
+        </header>
+
+        <section class="modal-grid">
+          <article class="modal-panel">
+            <h3>Pattern profile</h3>
+            {#if selectedProjectPatterns.length > 0}
+              <div class="chip-row">
+                {#each selectedProjectPatterns as pattern}
+                  <span class="cb-pill small">{patternIcon(pattern)} {pattern}</span>
+                {/each}
+              </div>
+            {:else}
+              <p class="muted">No stable project pattern has been inferred yet.</p>
+            {/if}
+
+            {#if selectedProjectFindings.length > 0}
+              <div class="finding-list">
+                {#each selectedProjectFindings as finding}
+                  <article class="finding-card" data-kind={finding.kind}>
+                    <div class="finding-card-header">
+                      <span class={`signal-pill ${findingSeverityTone(finding.severity)}`}>{findingLabel(finding)}</span>
+                      <strong>{finding.title}</strong>
+                      <span class="cb-pill small">{findingConfidence(finding)}</span>
+                    </div>
+                    <p class="muted">{finding.summary}</p>
+                    {#if (finding.alternatives?.length ?? 0) > 0}
+                      <div class="chip-row">
+                        {#each finding.alternatives ?? [] as alternative}
+                          <span>{alternative}</span>
+                        {/each}
+                      </div>
+                    {/if}
+                    {#if finding.evidence.length > 0}
+                      <div class="finding-evidence-grid">
+                        {#each finding.evidence.slice(0, 4) as evidence}
+                          <div class="reference-block compact">
+                            <strong>{evidence.technology}</strong>
+                            <span class="muted">{evidenceSummary(evidence)}</span>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                  </article>
+                {/each}
+              </div>
+            {:else}
+              <p class="muted">No project findings are available yet.</p>
+            {/if}
+          </article>
+
+          <article class="modal-panel">
+            <h3>Observed evidence</h3>
+            <div class="project-metrics">
+              <span>{selectedProject.coveragePercent.toFixed(1)}% covered</span>
+              <span>{selectedProject.untrackedTechs} uncharted</span>
+              <span>{selectedProject.holdTechs} hold</span>
+            </div>
+
+            {#if selectedProjectEvidence.length > 0}
+              <div class="finding-list">
+                {#each selectedProjectEvidence.slice(0, 10) as tech}
+                  <article class="finding-card">
+                    <div class="finding-card-header">
+                      <strong>{tech.name}</strong>
+                      <span class="cb-pill small">{tech.source}</span>
+                      {#if tech.version}
+                        <span class="cb-pill small">{tech.version}</span>
+                      {/if}
+                    </div>
+                    <div class="chip-row">
+                      {#if tech.evidence_title}
+                        <span>{tech.evidence_title}</span>
+                      {/if}
+                      {#if tech.evidence_path}
+                        <span>{tech.evidence_path}</span>
+                      {/if}
+                      {#if tech.observation_kind}
+                        <span>{tech.observation_kind}</span>
+                      {/if}
+                    </div>
+                  </article>
+                {/each}
+              </div>
+            {:else}
+              <p class="muted">No project observations are available yet.</p>
             {/if}
           </article>
         </section>
@@ -3099,6 +3294,13 @@
     gap: 0.85rem;
   }
 
+  button.project-card {
+    appearance: none;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+  }
+
   .project-card[data-risk="critical"] {
     border-color: rgba(180, 35, 24, 0.24);
   }
@@ -3539,6 +3741,47 @@
     background: rgba(255, 255, 255, 0.64);
   }
 
+  .finding-list {
+    display: grid;
+    gap: 0.85rem;
+    margin-top: 1rem;
+  }
+
+  .finding-card {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .finding-card[data-kind="anti_pattern"] {
+    border-color: rgba(180, 35, 24, 0.18);
+  }
+
+  .finding-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .finding-evidence-grid {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .reference-block.compact {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.8rem 0.9rem;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.6);
+  }
+
   .motion-callout {
     margin-top: 1rem;
     padding: 1rem;
@@ -3889,6 +4132,11 @@
     border-radius: 50%; width: 18px; height: 18px;
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 0.65rem;
+  }
+  .cb-pattern-button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
   }
 
   .cb-graph-legend {
