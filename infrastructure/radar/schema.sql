@@ -48,6 +48,18 @@ CREATE TABLE IF NOT EXISTS project_technologies (
     PRIMARY KEY (project_id, tech_name)
 );
 
+CREATE TABLE IF NOT EXISTS project_technology_observations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+    tech_name TEXT NOT NULL,
+    version TEXT,
+    source TEXT,
+    evidence_path TEXT,
+    evidence_title TEXT,
+    observation_kind TEXT,
+    observed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS entry_projects (
     entry_id UUID REFERENCES entries(id) ON DELETE CASCADE,
     project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
@@ -65,3 +77,5 @@ CREATE TABLE IF NOT EXISTS api_keys (
 -- Index for fast tech lookup
 CREATE INDEX IF NOT EXISTS idx_entries_name ON entries(name);
 CREATE INDEX IF NOT EXISTS idx_project_technologies_name ON project_technologies(tech_name);
+CREATE INDEX IF NOT EXISTS idx_project_technology_observations_name ON project_technology_observations(tech_name);
+CREATE INDEX IF NOT EXISTS idx_project_technology_observations_project_id ON project_technology_observations(project_id);

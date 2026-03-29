@@ -33,6 +33,10 @@ export interface ProjectTechnology {
   source: string;
   version?: string;
   quadrant?: string;
+  evidence_path?: string;
+  evidence_title?: string;
+  observation_kind?: string;
+  observed_at?: string;
 }
 
 export interface Project {
@@ -41,6 +45,7 @@ export interface Project {
   url?: string;
   last_scan: string;
   technologies?: ProjectTechnology[];
+  observations?: ProjectTechnology[];
 }
 
 export interface UsageStat {
@@ -206,6 +211,7 @@ export interface DashboardModel {
   offCanvasEntries: Entry[];
   filteredEntries: Entry[];
   filteredProjects: ProjectIntelligence[];
+  allProjects: ProjectIntelligence[];
   summaryMetrics: SummaryMetric[];
   coveragePercent: number;
   projectCount: number;
@@ -464,6 +470,7 @@ export function computeDashboardModel(
     offCanvasEntries,
     filteredEntries,
     filteredProjects,
+    allProjects: mergedProjects,
     summaryMetrics,
     coveragePercent,
     projectCount: projects.length,

@@ -5,6 +5,7 @@ export interface CodebaseAnalysis {
   edges: DependencyEdge[];
   stacks: ProjectStack[];
   patterns: PatternTag[];
+  findings?: ProjectFinding[];
   file_tree: ProjectTree[];
   summary: CodebaseSummary;
 }
@@ -38,6 +39,34 @@ export interface PatternTag {
   projects: string[];
   signal: string;
   icon: string;
+}
+
+export type FindingKind = 'pattern' | 'anti_pattern';
+export type FindingSeverity = 'low' | 'medium' | 'high';
+
+export interface ProjectIdentity {
+  id: string;
+  name: string;
+}
+
+export interface FindingEvidence {
+  technology: string;
+  source: string;
+  version?: string;
+  evidence_path?: string;
+  evidence_title?: string;
+}
+
+export interface ProjectFinding {
+  id: string;
+  kind: FindingKind;
+  title: string;
+  summary: string;
+  severity: FindingSeverity;
+  confidence: number;
+  project: ProjectIdentity;
+  evidence: FindingEvidence[];
+  alternatives?: string[];
 }
 
 export interface ProjectTree {
@@ -337,4 +366,15 @@ export function patternIcon(pattern: string): string {
     'Full-stack': '🌐',
   };
   return icons[pattern] ?? '🏷️';
+}
+
+export function findingSeverityTone(severity: FindingSeverity): 'good' | 'watch' | 'danger' {
+  switch (severity) {
+    case 'high':
+      return 'danger';
+    case 'medium':
+      return 'watch';
+    default:
+      return 'good';
+  }
 }
