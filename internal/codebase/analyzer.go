@@ -10,84 +10,212 @@ import (
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
 )
 
-// patternRule defines a heuristic for detecting an architectural pattern.
-type patternRule struct {
-	Name   string
-	Icon   string
-	Signal string
-	Match  func(techs []string, sources []string) bool
+type projectFindingRule struct {
+	ID           string
+	PatternName  string
+	Icon         string
+	Signal       string
+	Kind         types.FindingKind
+	Severity     types.FindingSeverity
+	Confidence   float64
+	Title        string
+	Alternatives []string
+	Match        func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence
+	Summary      func(project types.Project, evidence []types.FindingEvidence) string
 }
 
-var defaultPatternRules = []patternRule{
+var projectFindingRules = []projectFindingRule{
 	{
-		Name:   "GitOps",
-		Icon:   "🔄",
-		Signal: "Flux, ArgoCD, or GitOps tooling detected",
-		Match: func(techs, sources []string) bool {
-			keywords := []string{"flux", "argocd", "argo-cd", "gitops", "kustomize"}
-			return anyContains(techs, keywords)
+		ID:          "gitops",
+		PatternName: "GitOps",
+		Icon:        "🔄",
+		Signal:      "Flux, ArgoCD, or GitOps tooling detected",
+		Kind:        types.FindingKindPattern,
+		Severity:    types.FindingSeverityLow,
+		Confidence:  0.95,
+		Title:       "GitOps architecture",
+		Alternatives: []string{
+			"Document the approved GitOps workflow in an ADR.",
+		},
+		Match: func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+			return collectTechEvidence(project, func(tech types.DiscoveredTech) bool {
+				return techKeywordMatch(tech, []string{"flux", "argocd", "argo-cd", "gitops", "kustomize"})
+			})
+		},
+		Summary: func(project types.Project, evidence []types.FindingEvidence) string {
+			return "Flux, ArgoCD, or Kustomize signals show a GitOps-style delivery path."
 		},
 	},
 	{
-		Name:   "MCP-enabled",
-		Icon:   "🤖",
-		Signal: "Model Context Protocol config files or SDK detected",
-		Match: func(techs, sources []string) bool {
-			mcpSources := []string{".mcp.json", "mcp.json", "claude_desktop_config.json", "cline_mcp_settings.json"}
-			if anyExact(sources, mcpSources) {
-				return true
-			}
-			keywords := []string{"model context protocol", "mcp-go", "modelcontextprotocol"}
-			return anyContains(techs, keywords)
+		ID:          "mcp-enabled",
+		PatternName: "MCP-enabled",
+		Icon:        "🤖",
+		Signal:      "Model Context Protocol config files or SDK detected",
+		Kind:        types.FindingKindPattern,
+		Severity:    types.FindingSeverityLow,
+		Confidence:  0.93,
+		Title:       "MCP-enabled workspace",
+		Alternatives: []string{
+			"Standardize the MCP launcher and config path for the team.",
 		},
-	},
-	{
-		Name:   "AI/ML pipeline",
-		Icon:   "🧠",
-		Signal: "AI/ML frameworks or inference platforms detected",
-		Match: func(techs, _ []string) bool {
-			keywords := []string{"openai", "anthropic", "langchain", "langgraph", "ollama", "vllm", "litellm", "llamaindex", "llama-index", "pytorch", "tensorflow", "transformers", "huggingface"}
-			return anyContains(techs, keywords)
-		},
-	},
-	{
-		Name:   "Containerized",
-		Icon:   "📦",
-		Signal: "Docker or container runtime tooling detected",
-		Match: func(techs, _ []string) bool {
-			keywords := []string{"docker", "podman", "buildkit", "kaniko", "containerd"}
-			return anyContains(techs, keywords)
-		},
-	},
-	{
-		Name:   "Monorepo",
-		Icon:   "🏗️",
-		Signal: "Multiple language manifests in same project",
-		Match: func(_, sources []string) bool {
-			langManifests := map[string]bool{}
-			mapping := map[string]string{
-				"go.mod":           "go",
-				"package.json":     "js",
-				"pyproject.toml":   "python",
-				"requirements.txt": "python",
-				"Cargo.toml":       "rust",
-			}
-			for _, s := range sources {
-				if lang, ok := mapping[s]; ok {
-					langManifests[lang] = true
+		Match: func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+			return collectTechEvidence(project, func(tech types.DiscoveredTech) bool {
+				if sourceExactMatch(tech.Source, []string{".mcp.json", "mcp.json", "claude_desktop_config.json", "cline_mcp_settings.json"}) {
+					return true
 				}
-			}
-			return len(langManifests) >= 2
+				return techKeywordMatch(tech, []string{"model context protocol", "mcp-go", "modelcontextprotocol"})
+			})
+		},
+		Summary: func(project types.Project, evidence []types.FindingEvidence) string {
+			return "Model Context Protocol tooling is present across config or SDK files."
 		},
 	},
 	{
-		Name:   "Full-stack",
-		Icon:   "🌐",
-		Signal: "Both frontend and backend frameworks detected",
-		Match: func(techs, _ []string) bool {
-			hasFrontend := anyContains(techs, []string{"react", "svelte", "vue", "angular", "next", "nuxt", "astro"})
-			hasBackend := anyContains(techs, []string{"express", "fastapi", "django", "flask", "gin", "echo", "fiber", "cobra"})
-			return hasFrontend && hasBackend
+		ID:          "ai-ml-pipeline",
+		PatternName: "AI/ML pipeline",
+		Icon:        "🧠",
+		Signal:      "AI/ML frameworks or inference platforms detected",
+		Kind:        types.FindingKindPattern,
+		Severity:    types.FindingSeverityLow,
+		Confidence:  0.90,
+		Title:       "AI/ML pipeline",
+		Alternatives: []string{
+			"Prefer one approved model/runtime path for this workflow.",
+		},
+		Match: func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+			return collectTechEvidence(project, func(tech types.DiscoveredTech) bool {
+				return techKeywordMatch(tech, []string{"openai", "anthropic", "langchain", "langgraph", "ollama", "vllm", "litellm", "llamaindex", "llama-index", "pytorch", "tensorflow", "transformers", "huggingface"})
+			})
+		},
+		Summary: func(project types.Project, evidence []types.FindingEvidence) string {
+			return "AI/ML frameworks or inference platforms are part of the project stack."
+		},
+	},
+	{
+		ID:          "containerized",
+		PatternName: "Containerized",
+		Icon:        "📦",
+		Signal:      "Docker or container runtime tooling detected",
+		Kind:        types.FindingKindPattern,
+		Severity:    types.FindingSeverityLow,
+		Confidence:  0.88,
+		Title:       "Containerized runtime",
+		Alternatives: []string{
+			"Keep the image and build contract in one shared base.",
+		},
+		Match: func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+			return collectTechEvidence(project, func(tech types.DiscoveredTech) bool {
+				return techKeywordMatch(tech, []string{"docker", "podman", "buildkit", "kaniko", "containerd"})
+			})
+		},
+		Summary: func(project types.Project, evidence []types.FindingEvidence) string {
+			return "Container tooling is part of the project delivery path."
+		},
+	},
+	{
+		ID:          "monorepo",
+		PatternName: "Monorepo",
+		Icon:        "🏗️",
+		Signal:      "Multiple language manifests in same project",
+		Kind:        types.FindingKindPattern,
+		Severity:    types.FindingSeverityLow,
+		Confidence:  0.86,
+		Title:       "Monorepo shape",
+		Alternatives: []string{
+			"Keep shared tooling documented if this split is intentional.",
+		},
+		Match: func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+			return collectFamilyEvidence(project, 2)
+		},
+		Summary: func(project types.Project, evidence []types.FindingEvidence) string {
+			return "This project spans multiple manifest ecosystems, which suggests a monorepo or polyglot service boundary."
+		},
+	},
+	{
+		ID:          "full-stack",
+		PatternName: "Full-stack",
+		Icon:        "🌐",
+		Signal:      "Both frontend and backend frameworks detected",
+		Kind:        types.FindingKindPattern,
+		Severity:    types.FindingSeverityLow,
+		Confidence:  0.84,
+		Title:       "Full-stack delivery",
+		Alternatives: []string{
+			"Document the split between frontend and backend ownership.",
+		},
+		Match: func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+			return collectFullStackEvidence(project)
+		},
+		Summary: func(project types.Project, evidence []types.FindingEvidence) string {
+			return "Frontend and backend frameworks co-exist in the same project."
+		},
+	},
+	{
+		ID:         "hold-usage",
+		Kind:       types.FindingKindAntiPattern,
+		Severity:   types.FindingSeverityHigh,
+		Confidence: 0.99,
+		Title:      "Hold technology still in use",
+		Alternatives: []string{
+			"Replace the hold tech with the approved adopt standard.",
+			"Set a migration checkpoint before the usage spreads further.",
+		},
+		Match: func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+			return collectHoldEvidence(project, entryByName)
+		},
+		Summary: func(project types.Project, evidence []types.FindingEvidence) string {
+			return "This project still depends on hold-ring technologies, which usually means migration work is overdue."
+		},
+	},
+	{
+		ID:         "untracked-concentration",
+		Kind:       types.FindingKindAntiPattern,
+		Severity:   types.FindingSeverityMedium,
+		Confidence: 0.94,
+		Title:      "Untracked technology concentration",
+		Alternatives: []string{
+			"Map the technologies to existing radar entries.",
+			"Add a new entry for the missing standard.",
+		},
+		Match: func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+			return collectUntrackedEvidence(project, entryByName)
+		},
+		Summary: func(project types.Project, evidence []types.FindingEvidence) string {
+			return "A majority of the project's technology surface is still uncharted, so governance decisions are likely missing."
+		},
+	},
+	{
+		ID:         "polyglot-spread",
+		Kind:       types.FindingKindAntiPattern,
+		Severity:   types.FindingSeverityMedium,
+		Confidence: 0.90,
+		Title:      "Polyglot spread",
+		Alternatives: []string{
+			"Prefer a single primary runtime per deployable unit.",
+			"Document the boundary explicitly if the split is intentional.",
+		},
+		Match: func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+			return collectFamilyEvidence(project, 3)
+		},
+		Summary: func(project types.Project, evidence []types.FindingEvidence) string {
+			return "This project spans multiple manifest ecosystems, which raises ownership and standardization cost."
+		},
+	},
+	{
+		ID:         "ai-mcp-fragmentation",
+		Kind:       types.FindingKindAntiPattern,
+		Severity:   types.FindingSeverityMedium,
+		Confidence: 0.91,
+		Title:      "Fragmented AI/MCP tooling",
+		Alternatives: []string{
+			"Pick one approved SDK or launcher path.",
+			"Consolidate config and package entrypoints.",
+		},
+		Match: func(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+			return collectAIMCPFragmentationEvidence(project)
+		},
+		Summary: func(project types.Project, evidence []types.FindingEvidence) string {
+			return "AI/MCP tooling is spread across multiple signals, which can fragment the approval and rollout path."
 		},
 	},
 }
@@ -145,29 +273,45 @@ func Analyze(radar *types.Radar, projects []types.Project) *types.CodebaseAnalys
 		return nodes[i].Name < nodes[j].Name
 	})
 
-	// 2. Build edges: technologies that appear together in the same project.
+	// 2. Derive project findings and pattern badges.
+	projectSignals := make(map[string]projectSignalResult, len(projects))
+	patternProjects := map[string][]string{}
+	findings := make([]types.ProjectFinding, 0)
+	for _, project := range projects {
+		signals := buildProjectSignals(project, entryByName)
+		projectSignals[project.ID] = signals
+		findings = append(findings, signals.Findings...)
+		for _, pattern := range signals.Patterns {
+			patternProjects[pattern] = appendUnique(patternProjects[pattern], project.Name)
+		}
+	}
+
+	// 3. Build edges: technologies that appear together in the same project.
 	edges := buildEdges(projects, entryByName)
 
-	// 3. Build per-project stacks.
-	stacks := buildStacks(projects, entryByName)
+	// 4. Build per-project stacks.
+	stacks := buildStacks(projects, entryByName, projectSignals)
 
-	// 4. Detect patterns.
-	patterns := detectPatterns(projects, entryByName)
+	// 5. Build codebase pattern tags.
+	patterns := buildPatternTags(patternProjects)
 
-	// 5. Build file trees.
+	// 6. Build file trees.
 	fileTrees := buildFileTrees(projects)
 
-	// 6. Summary.
+	// 7. Summary.
 	trackedPercent := 0.0
 	if len(techUsage) > 0 {
 		trackedPercent = math.Round(float64(trackedCount)/float64(len(techUsage))*1000) / 10
 	}
+
+	sortFindings(findings)
 
 	return &types.CodebaseAnalysis{
 		Nodes:    nodes,
 		Edges:    edges,
 		Stacks:   stacks,
 		Patterns: patterns,
+		Findings: findings,
 		FileTree: fileTrees,
 		Summary: types.CodebaseSummary{
 			TotalProjects:     len(projects),
@@ -238,7 +382,12 @@ func buildEdges(projects []types.Project, entryByName map[string]types.Entry) []
 	return edges
 }
 
-func buildStacks(projects []types.Project, entryByName map[string]types.Entry) []types.ProjectStack {
+type projectSignalResult struct {
+	Patterns []string
+	Findings []types.ProjectFinding
+}
+
+func buildStacks(projects []types.Project, entryByName map[string]types.Entry, projectSignals map[string]projectSignalResult) []types.ProjectStack {
 	stacks := make([]types.ProjectStack, 0, len(projects))
 	for _, p := range projects {
 		categories := map[string][]string{}
@@ -261,6 +410,7 @@ func buildStacks(projects []types.Project, entryByName map[string]types.Entry) [
 			ProjectName: p.Name,
 			LastScan:    p.LastScan,
 			Categories:  categories,
+			Patterns:    append([]string(nil), projectSignals[p.ID].Patterns...),
 			TechCount:   len(p.Technologies),
 		}
 
@@ -274,43 +424,67 @@ func buildStacks(projects []types.Project, entryByName map[string]types.Entry) [
 	return stacks
 }
 
-func detectPatterns(projects []types.Project, entryByName map[string]types.Entry) []types.PatternTag {
-	var patterns []types.PatternTag
+func buildProjectSignals(project types.Project, entryByName map[string]types.Entry) projectSignalResult {
+	result := projectSignalResult{
+		Patterns: make([]string, 0),
+		Findings: make([]types.ProjectFinding, 0),
+	}
 
-	for _, rule := range defaultPatternRules {
-		var matchedProjects []string
-
-		for _, p := range projects {
-			techs := make([]string, 0, len(p.Technologies))
-			sources := make([]string, 0, len(p.Technologies))
-			for _, t := range p.Technologies {
-				techs = append(techs, strings.ToLower(t.Name))
-				sources = append(sources, strings.ToLower(t.Source))
-			}
-			// Also check radar entry names for this project.
-			for _, t := range p.Technologies {
-				key := strings.ToLower(t.Name)
-				if e, ok := entryByName[key]; ok {
-					techs = append(techs, strings.ToLower(e.Name))
-				}
-			}
-
-			if rule.Match(techs, sources) {
-				matchedProjects = append(matchedProjects, p.Name)
-			}
+	for _, rule := range projectFindingRules {
+		evidence := rule.Match(project, entryByName)
+		if len(evidence) == 0 {
+			continue
 		}
 
-		if len(matchedProjects) > 0 {
-			patterns = append(patterns, types.PatternTag{
-				Pattern:  rule.Name,
-				Projects: matchedProjects,
-				Signal:   rule.Signal,
-				Icon:     rule.Icon,
-			})
+		finding := types.ProjectFinding{
+			ID:           findingID(rule.ID, project.ID),
+			Kind:         rule.Kind,
+			Title:        rule.Title,
+			Summary:      rule.Summary(project, evidence),
+			Severity:     rule.Severity,
+			Confidence:   rule.Confidence,
+			Project:      types.ProjectIdentity{ID: project.ID, Name: project.Name},
+			Evidence:     evidence,
+			Alternatives: append([]string(nil), rule.Alternatives...),
+		}
+		result.Findings = append(result.Findings, finding)
+
+		if rule.PatternName != "" {
+			result.Patterns = appendUnique(result.Patterns, rule.PatternName)
 		}
 	}
 
+	sort.Strings(result.Patterns)
+	return result
+}
+
+func buildPatternTags(patternProjects map[string][]string) []types.PatternTag {
+	patternByName := make(map[string]projectFindingRule, len(projectFindingRules))
+	for _, rule := range projectFindingRules {
+		if rule.PatternName == "" {
+			continue
+		}
+		patternByName[rule.PatternName] = rule
+	}
+
+	patterns := make([]types.PatternTag, 0, len(patternProjects))
+	for name, projects := range patternProjects {
+		rule, ok := patternByName[name]
+		if !ok {
+			continue
+		}
+		patterns = append(patterns, types.PatternTag{
+			Pattern:  name,
+			Projects: append([]string(nil), projects...),
+			Signal:   rule.Signal,
+			Icon:     rule.Icon,
+		})
+	}
+
 	sort.Slice(patterns, func(i, j int) bool {
+		if len(patterns[i].Projects) == len(patterns[j].Projects) {
+			return patterns[i].Pattern < patterns[j].Pattern
+		}
 		return len(patterns[i].Projects) > len(patterns[j].Projects)
 	})
 
@@ -390,10 +564,35 @@ func appendUnique(slice []string, val string) []string {
 	return append(slice, val)
 }
 
-func anyContains(haystack []string, needles []string) bool {
-	for _, h := range haystack {
-		for _, n := range needles {
-			if strings.Contains(h, n) {
+func collectTechEvidence(project types.Project, match func(types.DiscoveredTech) bool) []types.FindingEvidence {
+	evidence := make([]types.FindingEvidence, 0)
+	seen := map[string]bool{}
+	for _, tech := range project.Technologies {
+		if !match(tech) {
+			continue
+		}
+		item := findingEvidenceFromTech(tech)
+		key := findingEvidenceKey(item)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		evidence = append(evidence, item)
+	}
+	return evidence
+}
+
+func techKeywordMatch(tech types.DiscoveredTech, keywords []string) bool {
+	fields := []string{
+		strings.ToLower(tech.Name),
+		strings.ToLower(tech.Source),
+		strings.ToLower(tech.Version),
+		strings.ToLower(tech.EvidenceTitle),
+		strings.ToLower(tech.EvidencePath),
+	}
+	for _, field := range fields {
+		for _, keyword := range keywords {
+			if strings.Contains(field, strings.ToLower(keyword)) {
 				return true
 			}
 		}
@@ -401,13 +600,278 @@ func anyContains(haystack []string, needles []string) bool {
 	return false
 }
 
-func anyExact(haystack []string, needles []string) bool {
-	for _, h := range haystack {
-		for _, n := range needles {
-			if strings.EqualFold(h, n) {
-				return true
-			}
+func sourceExactMatch(source string, candidates []string) bool {
+	for _, candidate := range candidates {
+		if strings.EqualFold(source, candidate) {
+			return true
 		}
 	}
 	return false
+}
+
+func collectFamilyEvidence(project types.Project, minFamilies int) []types.FindingEvidence {
+	familyEvidence := map[string]types.FindingEvidence{}
+	for _, tech := range project.Technologies {
+		family := sourceFamilyFor(tech)
+		if family == "" {
+			continue
+		}
+		if _, ok := familyEvidence[family]; ok {
+			continue
+		}
+		familyEvidence[family] = findingEvidenceFromTech(tech)
+	}
+
+	if len(familyEvidence) < minFamilies {
+		return nil
+	}
+
+	evidence := make([]types.FindingEvidence, 0, len(familyEvidence))
+	for _, item := range familyEvidence {
+		evidence = append(evidence, item)
+	}
+	sort.Slice(evidence, func(i, j int) bool {
+		return evidence[i].Technology < evidence[j].Technology
+	})
+	return evidence
+}
+
+func collectFullStackEvidence(project types.Project) []types.FindingEvidence {
+	frontend := make([]types.FindingEvidence, 0)
+	backend := make([]types.FindingEvidence, 0)
+	for _, tech := range project.Technologies {
+		switch {
+		case isFrontendTech(tech):
+			frontend = append(frontend, findingEvidenceFromTech(tech))
+		case isBackendTech(tech):
+			backend = append(backend, findingEvidenceFromTech(tech))
+		}
+	}
+	if len(frontend) == 0 || len(backend) == 0 {
+		return nil
+	}
+	evidence := []types.FindingEvidence{frontend[0], backend[0]}
+	return evidence
+}
+
+func collectHoldEvidence(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+	evidence := make([]types.FindingEvidence, 0)
+	seen := map[string]bool{}
+	for _, tech := range project.Technologies {
+		entry, ok := entryByName[strings.ToLower(tech.Name)]
+		if !ok || entry.Ring != types.RingHold {
+			continue
+		}
+		item := findingEvidenceFromTech(tech)
+		key := findingEvidenceKey(item)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		evidence = append(evidence, item)
+	}
+	return evidence
+}
+
+func collectUntrackedEvidence(project types.Project, entryByName map[string]types.Entry) []types.FindingEvidence {
+	untracked := make([]types.FindingEvidence, 0)
+	seen := map[string]bool{}
+	for _, tech := range project.Technologies {
+		if _, ok := entryByName[strings.ToLower(tech.Name)]; ok {
+			continue
+		}
+		item := findingEvidenceFromTech(tech)
+		key := findingEvidenceKey(item)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		untracked = append(untracked, item)
+	}
+
+	if len(project.Technologies) == 0 || len(untracked) < 3 {
+		return nil
+	}
+	if float64(len(untracked))/float64(len(project.Technologies)) < 0.5 {
+		return nil
+	}
+
+	sort.Slice(untracked, func(i, j int) bool {
+		return untracked[i].Technology < untracked[j].Technology
+	})
+	if len(untracked) > 4 {
+		untracked = untracked[:4]
+	}
+	return untracked
+}
+
+func collectAIMCPFragmentationEvidence(project types.Project) []types.FindingEvidence {
+	evidence := make([]types.FindingEvidence, 0)
+	seen := map[string]bool{}
+	sources := map[string]bool{}
+	for _, tech := range project.Technologies {
+		if !isAIMCPTech(tech) {
+			continue
+		}
+		item := findingEvidenceFromTech(tech)
+		key := findingEvidenceKey(item)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		sources[strings.ToLower(tech.Source)] = true
+		evidence = append(evidence, item)
+	}
+
+	if len(evidence) < 2 {
+		return nil
+	}
+	if len(sources) < 2 && len(evidence) < 3 {
+		return nil
+	}
+
+	sort.Slice(evidence, func(i, j int) bool {
+		return evidence[i].Technology < evidence[j].Technology
+	})
+	if len(evidence) > 4 {
+		evidence = evidence[:4]
+	}
+	return evidence
+}
+
+func findingEvidenceFromTech(tech types.DiscoveredTech) types.FindingEvidence {
+	source := tech.Source
+	if source == "" {
+		source = "unknown"
+	}
+	title := tech.EvidenceTitle
+	if title == "" {
+		title = tech.Name
+	}
+	path := tech.EvidencePath
+	if path == "" {
+		path = source
+	}
+	return types.FindingEvidence{
+		Technology:    tech.Name,
+		Source:        source,
+		Version:       tech.Version,
+		EvidencePath:  path,
+		EvidenceTitle: title,
+	}
+}
+
+func findingEvidenceKey(evidence types.FindingEvidence) string {
+	return strings.ToLower(strings.Join([]string{
+		evidence.Technology,
+		evidence.Source,
+		evidence.Version,
+		evidence.EvidencePath,
+		evidence.EvidenceTitle,
+	}, "|"))
+}
+
+func findingID(ruleID, projectID string) string {
+	if projectID == "" {
+		return ruleID
+	}
+	return ruleID + ":" + projectID
+}
+
+func sortFindings(findings []types.ProjectFinding) {
+	severityRank := func(severity types.FindingSeverity) int {
+		switch severity {
+		case types.FindingSeverityHigh:
+			return 0
+		case types.FindingSeverityMedium:
+			return 1
+		default:
+			return 2
+		}
+	}
+
+	sort.Slice(findings, func(i, j int) bool {
+		if findings[i].Project.Name != findings[j].Project.Name {
+			return findings[i].Project.Name < findings[j].Project.Name
+		}
+		if findings[i].Kind != findings[j].Kind {
+			return findings[i].Kind == types.FindingKindAntiPattern
+		}
+		if severityRank(findings[i].Severity) != severityRank(findings[j].Severity) {
+			return severityRank(findings[i].Severity) < severityRank(findings[j].Severity)
+		}
+		if findings[i].Title != findings[j].Title {
+			return findings[i].Title < findings[j].Title
+		}
+		return findings[i].ID < findings[j].ID
+	})
+}
+
+func sourceFamilyFor(tech types.DiscoveredTech) string {
+	source := strings.ToLower(tech.Source)
+	switch source {
+	case "go.mod", "go.sum":
+		return "go"
+	case "package.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb", "vite.config.ts", "vite.config.js":
+		return "javascript"
+	case "pyproject.toml", "requirements.txt", "poetry.lock", "setup.py":
+		return "python"
+	case "cargo.toml":
+		return "rust"
+	case "pom.xml", "build.gradle", "build.gradle.kts", "gradle.properties":
+		return "java"
+	case ".csproj", ".sln", "nuget.config":
+		return "dotnet"
+	case "gemfile", "*.gemspec":
+		return "ruby"
+	case "composer.json":
+		return "php"
+	case ".mcp.json", "mcp.json", "claude_desktop_config.json", "cline_mcp_settings.json":
+		return "mcp"
+	case "dockerfile", "docker-compose.yml", "compose.yaml", "compose.yml":
+		return "container"
+	case "adr":
+		return "techniques"
+	}
+
+	switch {
+	case strings.HasSuffix(source, ".go"):
+		return "go"
+	case strings.HasSuffix(source, ".ts"), strings.HasSuffix(source, ".tsx"), strings.HasSuffix(source, ".js"), strings.HasSuffix(source, ".jsx"):
+		return "javascript"
+	case strings.HasSuffix(source, ".py"):
+		return "python"
+	case strings.HasSuffix(source, ".rs"):
+		return "rust"
+	case strings.HasSuffix(source, ".cs"):
+		return "dotnet"
+	}
+	return ""
+}
+
+func isFrontendTech(tech types.DiscoveredTech) bool {
+	if sourceExactMatch(tech.Source, []string{"package.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb", "vite.config.ts", "vite.config.js"}) {
+		return true
+	}
+	return techKeywordMatch(tech, []string{
+		"react", "react-dom", "next", "nuxt", "vue", "svelte", "angular", "solid", "ember", "astro", "vite", "webpack", "tailwind",
+	})
+}
+
+func isBackendTech(tech types.DiscoveredTech) bool {
+	if sourceExactMatch(tech.Source, []string{"go.mod", "pyproject.toml", "requirements.txt", "poetry.lock", "setup.py", "pom.xml", "build.gradle", "build.gradle.kts", "composer.json"}) {
+		return true
+	}
+	return techKeywordMatch(tech, []string{
+		"go", "fastapi", "django", "flask", "express", "nest", "spring", "rails", "laravel", "fiber", "gin", "echo", "actix", "axum", "asp.net", "dotnet",
+	})
+}
+
+func isAIMCPTech(tech types.DiscoveredTech) bool {
+	if sourceExactMatch(tech.Source, []string{".mcp.json", "mcp.json", "claude_desktop_config.json", "cline_mcp_settings.json"}) {
+		return true
+	}
+	return techKeywordMatch(tech, []string{
+		"openai", "anthropic", "langchain", "langgraph", "ollama", "vllm", "litellm", "llamaindex", "llama-index", "mcp", "model context protocol", "modelcontextprotocol",
+	})
 }
