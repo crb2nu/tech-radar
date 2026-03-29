@@ -67,6 +67,7 @@ type Project struct {
 	URL          string           `json:"url,omitempty"`
 	LastScan     time.Time        `json:"last_scan"`
 	Technologies []DiscoveredTech `json:"technologies"`
+	Observations []DiscoveredTech `json:"observations,omitempty"`
 }
 
 // APIKey represents a machine token for ingestion.
@@ -109,17 +110,20 @@ type ScanResult struct {
 	ProjectID    string              `json:"project_id"`
 	Path         string              `json:"path"`
 	Technologies []DiscoveredTech    `json:"technologies"`
+	Observations []DiscoveredTech    `json:"observations,omitempty"`
 	Files        map[string][]string `json:"files"` // File -> deps
 }
 
 // DiscoveredTech represents a technology found during scanning.
 type DiscoveredTech struct {
-	Name          string   `json:"name"`
-	Source        string   `json:"source"` // package.json, go.mod, adr, etc.
-	Version       string   `json:"version,omitempty"`
-	Quadrant      Quadrant `json:"quadrant,omitempty"` // If known from mappings
-	EvidencePath  string   `json:"evidence_path,omitempty"`
-	EvidenceTitle string   `json:"evidence_title,omitempty"`
+	Name            string     `json:"name"`
+	Source          string     `json:"source"` // package.json, go.mod, adr, etc.
+	Version         string     `json:"version,omitempty"`
+	Quadrant        Quadrant   `json:"quadrant,omitempty"` // If known from mappings
+	EvidencePath    string     `json:"evidence_path,omitempty"`
+	EvidenceTitle   string     `json:"evidence_title,omitempty"`
+	ObservationKind string     `json:"observation_kind,omitempty"`
+	ObservedAt      *time.Time `json:"observed_at,omitempty"`
 }
 
 // Insights represents aggregated analytics for the ecosystem.

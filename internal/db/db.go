@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
+	"time"
 
 	"github.com/lib/pq"
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
@@ -99,9 +101,10 @@ func (d *DB) GetRadar(id string) (*types.Radar, error) {
 
 		// Fetch projects using this tech
 		pRows, err := d.pool.Query(`
-			SELECT p.name FROM projects p
+			SELECT DISTINCT p.name FROM projects p
 			JOIN project_technologies pt ON p.id = pt.project_id
 			WHERE pt.tech_name = $1
+			ORDER BY p.name ASC
 		`, e.Name)
 		if err == nil {
 			for pRows.Next() {
@@ -136,12 +139,13 @@ func (d *DB) GetProjects() ([]types.Project, error) {
 		}
 		p.URL = url.String
 
-		// Fetch technologies for this project, including persisted provenance.
+		// Fetch summarized technologies for this project, including persisted provenance.
 		tRows, err := d.pool.Query(`
-				SELECT tech_name, version, source, evidence_path, evidence_title
-				FROM project_technologies
-				WHERE project_id = $1
-			`, p.ID)
+			SELECT tech_name, version, source, evidence_path, evidence_title
+			FROM project_technologies
+			WHERE project_id = $1
+			ORDER BY tech_name ASC, COALESCE(source, '') ASC, COALESCE(evidence_path, '') ASC
+		`, p.ID)
 		if err == nil {
 			for tRows.Next() {
 				var t types.DiscoveredTech
@@ -158,6 +162,36 @@ func (d *DB) GetProjects() ([]types.Project, error) {
 				}
 			}
 			closeRows(tRows)
+		}
+
+		// Fetch raw observations so the API can preserve multiple evidence rows per technology.
+		oRows, err := d.pool.Query(`
+			SELECT tech_name, version, source, evidence_path, evidence_title, observation_kind, observed_at
+			FROM project_technology_observations
+			WHERE project_id = $1
+			ORDER BY observed_at DESC, tech_name ASC, COALESCE(source, '') ASC
+		`, p.ID)
+		if err == nil {
+			for oRows.Next() {
+				var obs types.DiscoveredTech
+				var version sql.NullString
+				var source sql.NullString
+				var evidencePath sql.NullString
+				var evidenceTitle sql.NullString
+				var observationKind sql.NullString
+				var observedAt time.Time
+				if err := oRows.Scan(&obs.Name, &version, &source, &evidencePath, &evidenceTitle, &observationKind, &observedAt); err == nil {
+					obs.Version = version.String
+					obs.Source = source.String
+					obs.EvidencePath = evidencePath.String
+					obs.EvidenceTitle = evidenceTitle.String
+					obs.ObservationKind = observationKind.String
+					observedAtCopy := observedAt
+					obs.ObservedAt = &observedAtCopy
+					p.Observations = append(p.Observations, obs)
+				}
+			}
+			closeRows(oRows)
 		}
 
 		projects = append(projects, p)
@@ -211,8 +245,17 @@ func (d *DB) SaveScan(result types.ScanResult) error {
 		return err
 	}
 
-	// 3. Insert new project_technologies
-	for _, tech := range result.Technologies {
+	// 3. Clear raw observations.
+	_, err = tx.Exec("DELETE FROM project_technology_observations WHERE project_id = $1", projectID)
+	if err != nil {
+		return err
+	}
+
+	observations := projectObservations(result)
+	summaryTechnologies := summarizeTechnologies(result, observations)
+
+	// 4. Insert summarized technologies for compatibility with existing consumers.
+	for _, tech := range summaryTechnologies {
 		_, err = tx.Exec(`
 			INSERT INTO project_technologies (project_id, tech_name, version, source, evidence_path, evidence_title)
 			VALUES ($1, $2, $3, $4, $5, $6)
@@ -222,7 +265,91 @@ func (d *DB) SaveScan(result types.ScanResult) error {
 		}
 	}
 
+	// 5. Insert the full observation stream so duplicate tech sightings are retained.
+	for _, obs := range observations {
+		var observedAt any
+		if obs.ObservedAt != nil {
+			observedAt = *obs.ObservedAt
+		}
+
+		_, err = tx.Exec(`
+			INSERT INTO project_technology_observations (
+				project_id, tech_name, version, source, evidence_path, evidence_title, observation_kind, observed_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, CURRENT_TIMESTAMP))
+		`, projectID, obs.Name, obs.Version, obs.Source, obs.EvidencePath, obs.EvidenceTitle, obs.ObservationKind, observedAt)
+		if err != nil {
+			return err
+		}
+	}
+
 	return tx.Commit()
+}
+
+func projectObservations(result types.ScanResult) []types.DiscoveredTech {
+	if len(result.Observations) > 0 {
+		return append([]types.DiscoveredTech(nil), result.Observations...)
+	}
+
+	return append([]types.DiscoveredTech(nil), result.Technologies...)
+}
+
+func summarizeTechnologies(result types.ScanResult, observations []types.DiscoveredTech) []types.DiscoveredTech {
+	if len(result.Technologies) > 0 {
+		return append([]types.DiscoveredTech(nil), result.Technologies...)
+	}
+
+	return summarizeObservations(observations)
+}
+
+func summarizeObservations(observations []types.DiscoveredTech) []types.DiscoveredTech {
+	summaries := make([]types.DiscoveredTech, 0, len(observations))
+	seen := make(map[string]int, len(observations))
+
+	for _, obs := range observations {
+		key := strings.ToLower(strings.TrimSpace(obs.Name))
+		if key == "" {
+			continue
+		}
+
+		if idx, ok := seen[key]; ok {
+			summaries[idx] = mergeObservationSummary(summaries[idx], obs)
+			continue
+		}
+
+		seen[key] = len(summaries)
+		summaries = append(summaries, obs)
+	}
+
+	return summaries
+}
+
+func mergeObservationSummary(existing, next types.DiscoveredTech) types.DiscoveredTech {
+	if existing.Name == "" {
+		existing.Name = next.Name
+	}
+	if existing.Source == "" {
+		existing.Source = next.Source
+	}
+	if existing.Version == "" {
+		existing.Version = next.Version
+	}
+	if existing.Quadrant == "" {
+		existing.Quadrant = next.Quadrant
+	}
+	if existing.EvidencePath == "" {
+		existing.EvidencePath = next.EvidencePath
+	}
+	if existing.EvidenceTitle == "" {
+		existing.EvidenceTitle = next.EvidenceTitle
+	}
+	if existing.ObservationKind == "" {
+		existing.ObservationKind = next.ObservationKind
+	}
+	if existing.ObservedAt == nil {
+		existing.ObservedAt = next.ObservedAt
+	}
+	return existing
 }
 
 // HasAPIKeys reports whether ingestion auth should be enforced.
