@@ -1,0 +1,120 @@
+version: 1
+scope: project-pattern-intelligence
+intent: Deterministic starter catalog for pattern, anti-pattern, and alternative guidance.
+
+patterns:
+  - id: gitops
+    title: GitOps
+    kind: pattern
+    severity: low
+    confidence: high
+    summary: Declarative delivery and environment management through Git.
+    evidence:
+      - flux
+      - argocd
+      - kustomize
+    alternatives:
+      - adopt: GitOps
+      - document_exception: true
+
+  - id: monorepo
+    title: Monorepo
+    kind: pattern
+    severity: low
+    confidence: medium
+    summary: Multiple language manifests or codebases live together intentionally.
+    evidence:
+      - package.json
+      - go.mod
+      - pyproject.toml
+      - Cargo.toml
+    alternatives:
+      - adopt: workspace conventions
+
+  - id: mcp-enabled
+    title: MCP-enabled
+    kind: pattern
+    severity: low
+    confidence: medium
+    summary: The project intentionally uses the Model Context Protocol or related SDKs.
+    evidence:
+      - .mcp.json
+      - mcp.json
+      - claude_desktop_config.json
+      - cline_mcp_settings.json
+    alternatives:
+      - adopt: Model Context Protocol
+
+anti_patterns:
+  - id: hold-usage
+    title: Hold technology still in production use
+    kind: anti_pattern
+    severity: high
+    confidence: high
+    summary: A technology in the hold ring still appears in active project scans.
+    evidence:
+      - hold ring entry
+      - project usage
+    alternatives:
+      - adopt: tracked replacement
+      - document_exception: true
+
+  - id: fragmented-ai-mcp
+    title: Fragmented AI / MCP tooling
+    kind: anti_pattern
+    severity: medium
+    confidence: medium
+    summary: Multiple AI or MCP stacks appear across projects without a clear standard.
+    evidence:
+      - openai
+      - anthropic
+      - mcp
+      - langchain
+      - langgraph
+    alternatives:
+      - adopt: a preferred platform standard
+      - trial: one shared integration path
+
+  - id: polyglot-sprawl
+    title: Polyglot sprawl without a clear reason
+    kind: anti_pattern
+    severity: medium
+    confidence: medium
+    summary: A project spans too many runtimes or ecosystems without a strong architectural explanation.
+    evidence:
+      - go.mod
+      - package.json
+      - pyproject.toml
+      - Cargo.toml
+    alternatives:
+      - adopt: a dominant runtime
+      - document_exception: true
+
+  - id: stack-divergence
+    title: Stack divergence between similar projects
+    kind: anti_pattern
+    severity: medium
+    confidence: medium
+    summary: Closely related projects share too few technologies for the amount of overlap they should have.
+    evidence:
+      - stack similarity
+      - shared dependencies
+    alternatives:
+      - trial: standard shared components
+      - document_exception: true
+
+  - id: ad-hoc-ai
+    title: Ad-hoc AI integrations
+    kind: anti_pattern
+    severity: medium
+    confidence: medium
+    summary: AI features appear in project scans without a shared naming, runtime, or governance pattern.
+    evidence:
+      - openai
+      - anthropic
+      - langchain
+      - ollama
+      - vllm
+    alternatives:
+      - adopt: one preferred AI integration path
+      - trial: one sanctioned experimental path

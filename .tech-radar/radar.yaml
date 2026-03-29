@@ -1,24 +1,169 @@
 id: ""
 meta:
     name: Personal Tech Radar
-    updated: 2026-03-16T09:06:49.612757-04:00
+    updated: 2026-03-29T00:00:00-04:00
     version: 1.0.0
 entries:
     - id: ""
       name: Go
       quadrant: languages
       ring: adopt
-      description: Primary backend language
+      description: Primary backend language for services and CLIs
       moved: 0
-    - id: ""
-      name: Python
-      quadrant: languages
-      ring: adopt
-      description: Data processing and scripting
-      moved: 0
+      tags:
+        - backend
+        - cli
+        - services
+      history:
+        - date: 2023-01-01T00:00:00-04:00
+          ring: trial
+          reason: Evaluate for CLI tooling
+        - date: 2023-06-01T00:00:00-04:00
+          ring: adopt
+          reason: Proven for services and automation
     - id: ""
       name: TypeScript
       quadrant: languages
       ring: adopt
       description: Frontend and Node.js development
       moved: 0
+      tags:
+        - frontend
+        - tooling
+      history:
+        - date: 2024-01-15T00:00:00-04:00
+          ring: assess
+          reason: Needed a browser UI and scripting language
+        - date: 2024-10-01T00:00:00-04:00
+          ring: adopt
+          reason: Consistent across the frontend and utilities
+    - id: ""
+      name: Python
+      quadrant: languages
+      ring: trial
+      description: Data processing, scripting, and occasional automation
+      moved: 0
+      tags:
+        - scripting
+        - data
+      history:
+        - date: 2024-02-01T00:00:00-04:00
+          ring: assess
+          reason: Keep for scripts and notebooks
+        - date: 2025-02-01T00:00:00-04:00
+          ring: trial
+          reason: Mature ecosystem still useful for automation
+    - id: ""
+      name: GitOps
+      quadrant: techniques
+      ring: adopt
+      description: Declarative delivery and environment management through Git
+      moved: 0
+      tags:
+        - delivery
+        - operations
+      history:
+        - date: 2024-03-15T00:00:00-04:00
+          ring: assess
+          reason: Standardize deployment workflows
+        - date: 2025-01-15T00:00:00-05:00
+          ring: adopt
+          reason: Stable Git-backed operations across environments
+    - id: ""
+      name: Model Context Protocol
+      quadrant: tools
+      ring: trial
+      description: Useful for agent integrations, but still needs governance
+      moved: 1
+      tags:
+        - ai
+        - agents
+      history:
+        - date: 2025-05-01T00:00:00-04:00
+          ring: assess
+          reason: Experiment with local agent tooling
+        - date: 2026-01-10T00:00:00-04:00
+          ring: trial
+          reason: Multiple repos now expose MCP configs or SDKs
+    - id: ""
+      name: Docker
+      quadrant: tools
+      ring: adopt
+      description: Containerization for local parity and delivery
+      moved: 0
+      tags:
+        - runtime
+        - delivery
+      history:
+        - date: 2023-05-01T00:00:00-04:00
+          ring: trial
+          reason: Standardize local environments
+        - date: 2024-05-01T00:00:00-04:00
+          ring: adopt
+          reason: Works well for packaging and deployment
+    - id: ""
+      name: Kubernetes
+      quadrant: platforms
+      ring: trial
+      description: Operational platform for services and shared infrastructure
+      moved: 0
+      tags:
+        - orchestration
+        - platform
+      history:
+        - date: 2024-06-01T00:00:00-04:00
+          ring: assess
+          reason: Useful for shared infra and service hosting
+        - date: 2025-06-01T00:00:00-04:00
+          ring: trial
+          reason: Broadly adopted for internal platform work
+    - id: ""
+      name: Terraform
+      quadrant: tools
+      ring: trial
+      description: Infrastructure provisioning that still needs guardrails
+      moved: 0
+      tags:
+        - infrastructure
+        - provisioning
+      history:
+        - date: 2023-09-01T00:00:00-04:00
+          ring: assess
+          reason: Started replacing manual infra management
+        - date: 2025-03-01T00:00:00-05:00
+          ring: trial
+          reason: Useful, but policy and drift controls still matter
+    - id: ""
+      name: Python 2
+      quadrant: languages
+      ring: hold
+      description: Legacy runtime to migrate away from
+      moved: 0
+      tags:
+        - legacy
+        - migration
+    - id: ""
+      name: Ruby on Rails
+      quadrant: frameworks
+      ring: assess
+      description: Still plausible for a few services, but not a default choice
+      moved: 0
+      tags:
+        - web
+        - legacy
+    - id: ""
+      name: OpenAI API
+      quadrant: platforms
+      ring: trial
+      description: Model-backed features that should stay reviewable and standardizable
+      moved: 0
+      tags:
+        - ai
+        - product
+      history:
+        - date: 2024-08-01T00:00:00-04:00
+          ring: assess
+          reason: Experimented with model-enabled workflows
+        - date: 2025-08-01T00:00:00-04:00
+          ring: trial
+          reason: Useful when surrounded by clear governance
