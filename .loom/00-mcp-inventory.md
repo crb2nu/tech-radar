@@ -2,115 +2,65 @@
 
 ## Runtime Mode Detection
 
-- Detection method: `list_mcp_resources`, `list_mcp_resource_templates`, and `read_mcp_resource(server="loom", uri="loom://config|servers|tools/index")`.
-- Loom-mode detected: `yes`.
+- Detection method:
+  - `list_mcp_resources`
+  - `list_mcp_resource_templates`
+  - `read_mcp_resource(server="loom", uri="loom://config")`
+  - `read_mcp_resource(server="loom", uri="loom://servers")`
+  - `read_mcp_resource(server="loom", uri="loom://tools/index")`
+- Loom-mode detected: `yes`
 - Evidence:
   - `loom://config` reports active profile `full`, `serverCount: 46`, and `toolCount: 498`.
-  - `loom://servers` returns the managed server inventory through the loom proxy.
-  - `loom://tools/index` reports `pageSize: 100`, `totalTools: 498`, and `totalPages: 5`.
+  - `loom://tools/index` reports `totalTools: 498` and `totalPages: 5`.
 
-## Server Inventory
+## Relevant Servers For This Repo
 
-- Total servers reported by loom: `46`.
-- Relevant planning/delivery servers for this repo:
-  - `codebase_memory`: semantic/lexical code index and code navigation.
-  - `git` and `gitlab`: local SCM plus GitLab MR/pipeline operations.
-  - `quality`: lint/test/security/coverage gates for Go packages.
-  - `browserkit`: screenshot capture for UI verification.
-  - `devbox`: sandbox execution when local toolchains drift.
-  - `context7` and `tavily`: external documentation and research.
-  - `agent_context`: session/task/handoff persistence.
+- `codebase_memory`
+  - Current index for `repo_id="tech-radar"` is present and queryable.
+- `agent_context`
+  - Available if we want durable planning or handoff context.
+- `gitlab`
+  - Available for future MR / pipeline workflows.
+- `devbox`
+  - Available as a sandbox fallback for builds/tests.
+- `quality`
+  - Available for Go-focused lint/test/security checks if we want a structured quality gate.
 
-## Tool Inventory Summary
+## Current Planning Baseline
 
-- Inventory source: loom proxy resources plus CLI fallback `loom tools list --json`.
-- Total tools: `498`.
-- Count by relevant server:
-  - `agent_context`: `59`
-  - `codebase_memory`: `17`
-  - `gitlab`: `33`
-  - `git`: `11`
-  - `devbox`: `11`
-  - `quality`: `6`
-  - `browserkit`: `1`
-  - `context7`: `2`
-  - `tavily`: `4`
-- Full server-count summary was derived with:
-  - `loom tools list --json | jq '.tools | map(.name | split("__")[0]) | group_by(.) | map({server: .[0], count: length}) | sort_by(.server)'`
-
-## Paged Deep-Dive Capture
-
-- Paged strategy:
-  - Used `loom://tools/index` to establish global pagination (`totalPages: 5`).
-  - Sampled server-specific pages for the tools most relevant to this repo:
-    - `loom://tools/server/codebase_memory/page/1`
-    - `loom://tools/server/gitlab/page/1`
-    - `loom://tools/server/quality/page/1`
-    - `loom://tools/server/browserkit/page/1`
-- Deep-dive findings:
-  - `codebase_memory` exposes indexing, polling, lexical search, definition/context, call graph, and module graph flows.
-  - `gitlab` exposes MR, pipeline, job, artifact, and merge automation flows.
-  - `quality` exposes lint, test, security, coverage, and arch checks.
-  - `browserkit` currently exposes a single `screenshot` tool.
-
-## Auth / Permissions / Constraints
-
-- Loom health is broadly good, but `gitlab` hub health shows intermittent lock timeout while the local target remains healthy enough for normal operations.
-- Initial codebase index with embeddings failed because `api.morphllm.com` could not be resolved:
-  - Error excerpt: `flush chunks: Post "https://api.morphllm.com/v1/embeddings": dial tcp: lookup api.morphllm.com: no such host`
-- Fallback index with `embeddings: false` completed successfully:
-  - `repo_id: tech-radar`
-  - `files_total: 15`
-  - `chunks_total: 117`
-  - `status: done`
-- Bundled planning helpers are currently broken by merge markers:
-  - `python /Users/cblevins/.codex/skills/plan-loom-core/scripts/init_loom_context.py --root .`
+- Helper scripts are healthy in this environment:
   - `python /Users/cblevins/.codex/skills/plan-loom-core/scripts/workspace_snapshot.py --root .`
-  - Both fail with `SyntaxError` at `<<<<<<< Updated upstream`.
-
-## Codebase Index Readiness
-
-- Current recommended mode: `usable with lexical/no-embedding search`.
-- Working evidence:
-  - `codebase_memory__codebase_stats(repo_id="tech-radar")` reports `117` chunks:
+  - `python /Users/cblevins/.codex/skills/plan-loom-core/scripts/init_loom_context.py --root .`
+- Codebase index readiness:
+  - `codebase_memory__codebase_stats(repo_id="tech-radar")` reports `117` chunks.
+  - Language split:
     - Go: `86`
     - TypeScript: `30`
     - JavaScript: `1`
-  - `codebase_text_search(query="GetInsights")` resolves `internal/api/api.go` and `internal/db/db.go`.
-  - `codebase_text_search(query="computeDashboardModel")` resolves `web/src/lib/dashboard.ts`.
+- Local validation baseline on `2026-03-29`:
+  - `go test ./...` passed.
+  - `pnpm check` passed with `0 errors and 0 warnings`.
+  - `pnpm build` passed.
 
-## Delegation Plan Used and Why
+## Constraints / Notes
 
-- Strategy used: single coordinator plus parallel read-only calls.
-- Why:
-  - The repo is small enough that sub-agents were unnecessary.
-  - MCP inventory, file inspection, and codebase polling are naturally parallel and low-risk.
-- Residual risk:
-  - The planning pack is accurate for the current environment, but helper-script breakage and embedding DNS issues should be treated as environment debt.
-
-## Notes
-
-- For this repo, the most useful MCP path is:
-  1. `codebase_memory` for navigation/search
-  2. `quality` for Go validation
-  3. `gitlab` for CI/MR lifecycle
-  4. `browserkit` for UI proof when the local screenshot dependency chain is healthy
+- This repo’s most useful MCP path for planning is:
+  1. `codebase_memory` for navigation and verification
+  2. loom inventory resources for environment awareness
+  3. local shell commands for line-precise source gathering
+- I did not need sub-agents for this planning pass because the repo is small and the work was mostly read-only inventory plus document synthesis.
+- I did not re-verify full paged server-by-server tool counts in this pass because the top-level loom inventory and current repo tasks were already sufficient.
 
 ## Sources
 
-- [S1] `loom://config`
-- [S2] `loom://servers`
-- [S3] `loom://tools/index`
-- [S4] `loom://tools/server/codebase_memory/page/1`
-- [S5] `loom://tools/server/gitlab/page/1`
-- [S6] `loom://tools/server/quality/page/1`
-- [S7] `loom://tools/server/browserkit/page/1`
-- [S8] `loom://health`
-- [S9] `loom tools list --json | jq '.tools | map(.name | split("__")[0]) | group_by(.) | map({server: .[0], count: length}) | sort_by(.server)'`
-- [S10] `codebase_memory__codebase_index_poll(job_id="aaa84db9975c352e")`
-- [S11] `codebase_memory__codebase_index_poll(job_id="44e3d6e56d4829b7")`
-- [S12] `codebase_memory__codebase_stats(repo_id="tech-radar")`
-- [S13] `codebase_memory__codebase_text_search(repo_id="tech-radar", query="GetInsights")`
-- [S14] `codebase_memory__codebase_text_search(repo_id="tech-radar", query="computeDashboardModel")`
-- [S15] `python /Users/cblevins/.codex/skills/plan-loom-core/scripts/init_loom_context.py --root .`
-- [S16] `python /Users/cblevins/.codex/skills/plan-loom-core/scripts/workspace_snapshot.py --root .`
+- [S1] `list_mcp_resources`
+- [S2] `list_mcp_resource_templates`
+- [S3] `loom://config`
+- [S4] `loom://servers`
+- [S5] `loom://tools/index`
+- [S6] `codebase_memory__codebase_stats(repo_id="tech-radar")`
+- [S7] `python /Users/cblevins/.codex/skills/plan-loom-core/scripts/workspace_snapshot.py --root .`
+- [S8] `python /Users/cblevins/.codex/skills/plan-loom-core/scripts/init_loom_context.py --root .`
+- [S9] `go test ./...`
+- [S10] `pnpm check`
+- [S11] `pnpm build`

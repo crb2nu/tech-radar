@@ -2,162 +2,191 @@
 
 ## Summary
 
-Expand Tech Radar into a **Decision Workbench**: a product that helps someone understand where a technology is showing up, why it matters, what evidence supports a decision, which projects are affected, and what follow-up action is needed next.
+Build **Project Pattern Intelligence** into Tech Radar.
 
-This is not a “replace the radar” proposal. The radar remains the portfolio map. The workbench adds the missing depth behind it so the app becomes useful instead of merely informative.
+The app should not only show what technologies exist across projects, but also identify the architectural patterns each project is exhibiting, flag anti-patterns or risky combinations, and recommend source-backed alternatives.
+
+This is an expansion of the existing radar, insights, and codebase experience, not a replacement for it. The radar remains the map; pattern intelligence becomes the guidance layer. `README.md:9-22`, `web/src/App.svelte:1696-1915`
 
 ## Product Goals
 
-- Turn aggregate signals into drill-downable decision context.
-- Preserve and surface evidence from scans so each technology can be inspected like a dossier.
-- Make project-level alignment actionable, not just scored.
-- Create a durable action queue for governance work instead of ephemeral recommendation rows.
-- Keep future discovery work, including AI/MCP expansion, as a multiplier on top of a stronger foundation.
+- Identify meaningful design patterns at the project level.
+- Flag anti-patterns and risky architecture combinations with explicit rationale.
+- Show the evidence behind each finding.
+- Suggest safer defaults, tracked standards, or next-best alternatives.
+- Preserve deterministic, repo-local behavior so users can trust and reproduce findings.
 
 ## Non-Goals
 
-- Replacing the existing four-ring radar model.
-- Building a full enterprise architecture platform or ticketing system.
-- Requiring external SaaS enrichment or live internet lookups for core functionality.
-- Solving every discovery gap in the same milestone.
+- Replacing the radar metaphor or ring model.
+- Building a full static-analysis platform or language-specific AST engine in the first slice.
+- Making autonomous architecture decisions without evidence or human review.
+- Turning the app into a generic ticketing or project-management system.
 
-## Users / Stakeholders
+## Users
 
-- Architecture owner / maintainer who sets standards and reviews exceptions.
-- Project owner who needs to understand why their project is “risky” and what to do next.
-- Future agent/operator who needs source-backed context for a technology decision without rereading multiple repos manually.
+- Architecture owner maintaining standards across many repos.
+- Project maintainer trying to understand why a project is risky or inconsistent.
+- Future agent/operator needing evidence-backed reasoning for a recommendation.
 
 ## User Problems
 
-1. “I can see that something is uncharted, but I can’t inspect the evidence behind it.”
-2. “I can see a project score, but I can’t tell which exact technologies are causing the score.”
-3. “I can see a recommendation, but I can’t work it as a real piece of governance follow-up.”
-4. “I can see a linked ADR, but I can’t tell how it connects to project adoption over time.”
+1. “I can see that a project is risky, but not what architecture pattern it falls into.”
+2. “I can see technologies, but not whether the combination is sensible or fragmented.”
+3. “I can see drift or uncharted usage, but not what the preferred alternative should be.”
+4. “I can see a pattern badge, but not what evidence triggered it or how confident the app is.”
 
-## Requirements
+## Functional Requirements
 
-### Functional
+1. Project finding model
+   - The system must produce first-class project findings, not only aggregate stats.
+   - Each finding should include at least:
+     - `id`
+     - `kind` (`pattern` or `anti_pattern`)
+     - `title`
+     - `summary`
+     - `severity`
+     - `confidence`
+     - `project`
+     - `evidence`
+     - `alternatives`
 
-1. Evidence persistence
-   - Preserve scanner evidence through the DB-backed ingestion path, not just in YAML-first flows.
-   - Retain enough provenance to answer where a technology was seen, from what source, and with what supporting file/title.
-   - Support multiple observations per project/technology when needed.
+2. Pattern catalog
+   - Extend the current positive pattern heuristics into a richer catalog.
+   - Preserve existing patterns where they still make sense:
+     - GitOps
+     - MCP-enabled
+     - AI/ML pipeline
+     - Containerized
+     - Monorepo
+     - Full-stack `internal/codebase/analyzer.go:21-93`
+   - Add additional project-level patterns that are still deterministically inferable from current scan inputs.
 
-2. Technology dossier
-   - Selecting a radar entry should open a useful dossier:
-     - affected projects
-     - observed versions and sources
-     - linked ADR/evidence files
-     - movement history
-     - current governance recommendation
-   - The dossier should explain why the technology is in its current ring and where its pressure is coming from.
+3. Anti-pattern catalog
+   - Introduce a paired anti-pattern catalog with explicit severity and remediation hints.
+   - Initial anti-pattern candidates should stay grounded in current scan evidence, for example:
+     - hold technology still active
+     - high untracked concentration
+     - fragmented AI/MCP tooling
+     - excessive polyglot spread
+     - stack divergence between otherwise similar projects
 
-3. Project drill-down
-   - Selecting a project should reveal:
-     - tracked vs untracked technologies
-     - hold exposure
-     - technologies likely ready for charting
-     - evidence/source breakdown for each important technology
-   - The project view should answer “what do we need to fix here?” rather than just “what is the score?”
+4. Evidence-backed explanations
+   - Every finding must show the observations that triggered it.
+   - Observation detail should include real evidence paths when available, not just manifest type labels.
+   - The UI should let a user answer “why did you say this?” quickly.
 
-4. Action queue
-   - The app needs a durable notion of governance follow-up, even if lightweight at first.
-   - Action items should link to the exact technology/project context that generated them.
-   - Actions should support at least a status model such as `new`, `reviewing`, `decided`, `deferred`.
+5. Alternative suggestions
+   - Findings should recommend the next best action:
+     - use an `adopt` standard
+     - evaluate a `trial` option
+     - create a new radar entry
+     - document an exception
+   - Suggestions should prefer tracked radar entries where possible.
 
-5. Portfolio change view
-   - Keep the radar and top-level overview, but shift them toward change and focus:
-     - what changed since last scan
-     - new technologies entering the estate
-     - projects whose risk materially changed
-     - decisions lacking evidence
+6. Project drill-down
+   - Each project should have an intelligence view that combines:
+     - detected patterns
+     - anti-pattern warnings
+     - relevant technologies
+     - supporting evidence
+     - recommended alternatives
 
-6. Discovery expansion compatibility
-   - AI/MCP discovery and other future scan expansions should feed the same dossier/action model.
-   - New discovery categories should not require inventing another special-case dashboard lane to become useful.
+7. Portfolio-level pattern view
+   - The app should show which patterns are common, which anti-patterns are spreading, and which projects need the next governance intervention.
 
-7. Demo/onboarding quality
-   - The default experience should not look empty.
-   - Seed/sample data or onboarding guidance should demonstrate the richer workflow with more than three entries.
+8. Rule authoring path
+   - The system should allow a future path toward repo-local rule authoring.
+   - A good first step is Go-defined defaults with a clear extension seam for `.tech-radar/patterns.yaml`.
 
-### Non-Functional
+## Non-Functional Requirements
 
-- Preserve deterministic, repo-local scanning.
-- Keep DB-backed and YAML-first behavior conceptually aligned, even if the richer workbench is DB-first.
-- Avoid regressing the existing radar visualization.
-- Maintain green validation with `go test ./...`, `pnpm check`, and `pnpm build`.
+- Deterministic by default.
+- Explainable with source-backed evidence.
+- Backward-compatible with the existing radar/dashboard shell.
+- Safe against noisy over-warning by supporting severity and confidence.
+- Green validation on:
+  - `go test ./...`
+  - `pnpm check`
+  - `pnpm build`
 
 ## UX / Core Flows
 
-1. Investigate an uncharted technology
-   - User sees `Chart X` in the action queue.
-   - They open the technology dossier.
-   - The dossier shows which projects use it, which files/configs/ADRs surfaced it, and whether usage is growing.
-   - User records a decision or defers with rationale.
+1. Review a project
+   - User opens a project card.
+   - They see pattern badges, anti-pattern warnings, severity, and evidence.
+   - Each warning includes a suggested alternative or next step.
 
-2. Review a risky project
-   - User opens a project card from the portfolio view.
-   - The project drill-down shows hold technologies, untracked technologies, evidence sources, and candidate standards.
-   - User can jump directly to the relevant technology dossiers.
+2. Inspect a warning
+   - User opens a flagged anti-pattern.
+   - The app shows which technologies and files triggered the rule.
+   - The app explains why the current setup is risky and what standard to prefer instead.
 
-3. Audit a technology decision
-   - User opens a radar entry from the radar map or action queue.
-   - They see ring history, adoption footprint, evidence links, and open follow-ups in one place.
-   - If the technology is drifting or heating up, the page explains the pressure rather than only showing a badge.
+3. Standardize a recurring project shape
+   - User notices a pattern spreading across multiple repos.
+   - The app suggests formalizing that pattern as an `adopt` or `trial` standard, or documenting it as an approved exception.
 
 ## Data / API Shape
 
-The current codebase already has most of the raw building blocks but not the right persistence model.
+### Current State
 
-- Today:
-  - Scanner captures evidence. `pkg/types/types.go:115-123`, `internal/scanner/scanner.go:371-395`
-  - DB ingestion drops it. `internal/db/db.go:192-201`, `infrastructure/radar/schema.sql:41-47`
-  - Project/radar APIs return shallow project technology data and summary analytics. `internal/api/api.go:161-215`, `internal/db/db.go:112-159`
+- The scanner can capture `EvidencePath` and `EvidenceTitle`. `pkg/types/types.go:115-123`, `internal/scanner/scanner.go:384-541`
+- The DB now persists those fields for project technologies. `internal/db/db.go:139-160`, `internal/db/db.go:184-225`
+- The codebase analyzer can emit portfolio pattern tags, but not per-project findings with severity or remediation. `internal/codebase/analyzer.go:154-179`, `pkg/types/codebase.go:43-49`
+- The frontend project technology model does not carry evidence fields forward. `web/src/lib/dashboard.ts:31-44`
 
-- Needed:
-  - Extend project-technology persistence to retain evidence and observation metadata.
-  - Add detail endpoints or equivalent API shapes for project and entry drill-downs.
-  - Introduce a lightweight persisted action model or a clearly materialized derived-action store.
+### Needed State
+
+- A richer observation model that can represent multiple observations for the same technology in the same project.
+- A project-finding model for positive and negative architecture signals.
+- Project-detail and finding-detail API shapes.
+- Alternative-suggestion payloads that can point to tracked radar entries or recommended next actions.
 
 ## Rollout
 
 - Phase 1:
-  - Evidence persistence and detail-oriented API shapes.
+  - observation model + richer rule engine
 - Phase 2:
-  - Technology dossiers and project drill-down UI.
+  - project findings API and codebase-analysis enrichment
 - Phase 3:
-  - Durable action queue and change-focused overview.
+  - project intelligence UI with warnings and alternatives
 - Phase 4:
-  - Discovery expansions such as richer AI/MCP coverage plugged into the same model.
-
-Backout:
-- If the richer workbench slice proves too large, ship Phase 1 independently because evidence persistence is valuable on its own.
+  - configurable rule catalog and onboarding polish
 
 ## Risks
 
-- Schema/API changes may create divergence between YAML-first local mode and DB-backed mode if not designed carefully.
-- Persisting more observations can make scans noisier unless the UI is opinionated about surfacing only the most relevant evidence.
-- Adding a durable action model can sprawl if we try to build project management instead of lightweight governance follow-up.
+- Warning quality will suffer if we try to infer too much from one-row-per-tech project storage. `infrastructure/radar/schema.sql:41-49`
+- Overly aggressive anti-pattern rules can produce alarm fatigue.
+- Project intelligence could become visually heavy unless findings are ranked and grouped well.
 
 ## Open Questions
 
-- Should action items be persisted in the product database immediately, or materialized from deterministic rules first and persisted later?
-- Do we want one generic evidence model, or explicit observation types such as `dependency`, `config`, `adr`, and `manual`?
-- Should project drill-downs be modal/drawer-based or full-page routes?
+- Should findings be returned only from `/api/v1/codebase`, or should there be dedicated `/api/v1/projects/:id/intelligence` and `/api/v1/findings` endpoints?
+- Should alternatives be free text first, or typed references to existing radar entries plus fallback text?
+- Which first anti-patterns are valuable enough to ship without requiring deeper source-code parsing?
+
+## Acceptance Criteria
+
+- A user can open a project and see at least one clear architecture profile, any applicable anti-pattern warnings, and the evidence behind them.
+- A warning includes a recommended alternative or next governance action.
+- Findings are explainable and deterministic.
+- Existing radar, insights, and codebase views still work.
+- Validation remains green:
+  - `go test ./...`
+  - `pnpm check`
+  - `pnpm build`
 
 ## Sources
 
-- [S1] `README.md:5-22`
-- [S2] `README.md:91-165`
-- [S3] `.tech-radar/radar.yaml:1-24`
-- [S4] `pkg/types/types.go:115-123`
-- [S5] `internal/scanner/scanner.go:371-395`
-- [S6] `internal/db/db.go:112-201`
-- [S7] `internal/api/api.go:161-215`
-- [S8] `infrastructure/radar/schema.sql:3-65`
-- [S9] `web/src/App.svelte:341-363`
-- [S10] `web/src/App.svelte:455-767`
-- [S11] `web/src/App.svelte:943-1243`
-- [S12] `web/src/App.svelte:1335-1405`
-- [S13] `web/src/lib/dashboard.ts:307-447`
-- [S14] `web/src/lib/dashboard.ts:932-1049`
+- [S1] `README.md:9-22`
+- [S2] `internal/scanner/scanner.go:384-541`
+- [S3] `internal/db/db.go:139-225`
+- [S4] `internal/codebase/analyzer.go:21-179`
+- [S5] `pkg/types/codebase.go:43-49`
+- [S6] `pkg/types/types.go:115-123`
+- [S7] `infrastructure/radar/schema.sql:41-49`
+- [S8] `web/src/App.svelte:1696-1915`
+- [S9] `web/src/lib/dashboard.ts:31-44`
+- [S10] `go test ./...`
+- [S11] `pnpm check`
+- [S12] `pnpm build`

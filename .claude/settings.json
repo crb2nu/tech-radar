@@ -1,31 +1,3 @@
 {
-  "permissions": {
-    "additionalDirectories": [
-      "~/workspace"
-    ],
-    "allow": [
-      "mcp__loom",
-      "Bash",
-      "Edit",
-      "MultiEdit",
-      "Glob",
-      "Grep",
-      "Read",
-      "Write",
-      "NotebookEdit",
-      "NotebookRead",
-      "LS",
-      "Task",
-      "WebFetch",
-      "WebSearch",
-      "Skill",
-      "ToolSearch"
-    ],
-    "defaultMode": "acceptEdits",
-    "deny": [
-      "Bash(kubectl edit *)",
-      "Bash(kubectl set env *)"
-    ]
-  },
   "$schema": "https://json.schemastore.org/claude-code-settings.json"
 }

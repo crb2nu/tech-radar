@@ -104,6 +104,13 @@
   let graphSelected = $state<string | null>(null);
   let graphDragging = $state<GraphNode | null>(null);
   let cbGraphMode = $state<GraphDensityMode>('focused');
+  let cbProjectHighlight = $state<string | null>(null);
+  let cbFilters = $state({
+    quadrants: [] as string[],
+    rings: [] as string[],
+    ecosystems: [] as string[],
+    trackedOnly: false
+  });
   let cbSubTab = $state<'graph' | 'stacks' | 'files'>('graph');
   let expandedProjects = $state<Set<string>>(new Set());
 
@@ -580,9 +587,40 @@
   }
 
   let cbCategories = $derived(codebaseData ? allCategories(codebaseData.stacks) : []);
-  const cbGraphView = $derived(
-    getGraphView(graphNodes, graphEdges, cbGraphMode, [graphSelected, graphHovered].filter(Boolean) as string[])
+  let uniqueEcosystems = $derived(
+    Array.from(new Set(codebaseData?.nodes.map(n => n.ecosystem).filter(Boolean) ?? [])).sort()
   );
+
+  const cbGraphView = $derived(
+    getGraphView(
+      graphNodes,
+      graphEdges,
+      cbGraphMode,
+      [graphSelected, graphHovered].filter(Boolean) as string[],
+      cbFilters
+    )
+  );
+
+  const highlightedTechs = $derived((() => {
+    if (!cbProjectHighlight || !codebaseData) return new Set<string>();
+    const stack = codebaseData.stacks.find(s => s.project_name === cbProjectHighlight);
+    if (!stack) return new Set<string>();
+    const techs = new Set<string>();
+    for (const catTechs of Object.values(stack.categories)) {
+      for (const t of catTechs) techs.add(t);
+    }
+    return techs;
+  })());
+
+  function isNodeHighlighted(name: string) {
+    if (!cbProjectHighlight) return true;
+    return highlightedTechs.has(name);
+  }
+
+  function isEdgeHighlighted(source: string, target: string) {
+    if (!cbProjectHighlight) return true;
+    return highlightedTechs.has(source) && highlightedTechs.has(target);
+  }
 
   $effect(() => {
     if (activeTab === 'codebase' && codebaseData && graphNodes.length === 0) {
@@ -1774,7 +1812,7 @@
                     <button class:active={cbSubTab === 'files'} onclick={() => cbSubTab = 'files'}>File explorer</button>
                   </nav>
 
-                  {#if cbSubTab === 'graph'}
+                    {#if cbSubTab === 'graph'}
                     <div class="cb-graph-wrap" in:fade>
                       <div class="cb-graph-toolbar">
                         <div class="cb-graph-summary">
@@ -1785,24 +1823,113 @@
                               : 'Full mode shows the entire dependency graph with restrained labels.'}
                           </span>
                         </div>
-                        <div class="cb-graph-mode" role="group" aria-label="Dependency graph density">
-                          <button
-                            type="button"
-                            class:active={cbGraphMode === 'focused'}
-                            aria-pressed={cbGraphMode === 'focused'}
-                            onclick={() => cbGraphMode = 'focused'}
-                          >
-                            Focused
-                          </button>
-                          <button
-                            type="button"
-                            class:active={cbGraphMode === 'full'}
-                            aria-pressed={cbGraphMode === 'full'}
-                            onclick={() => cbGraphMode = 'full'}
-                          >
-                            Full
-                          </button>
+
+                        <div class="cb-graph-controls">
+                          <label class="cb-control-item">
+                            <span>Project Lens</span>
+                            <select bind:value={cbProjectHighlight}>
+                              <option value={null}>Show all projects</option>
+                              {#each codebaseData.stacks as stack}
+                                <option value={stack.project_name}>{stack.project_name}</option>
+                              {/each}
+                            </select>
+                          </label>
+
+                          <div class="cb-graph-mode" role="group" aria-label="Dependency graph density">
+                            <button
+                              type="button"
+                              class:active={cbGraphMode === 'focused'}
+                              aria-pressed={cbGraphMode === 'focused'}
+                              onclick={() => cbGraphMode = 'focused'}
+                            >
+                              Focused
+                            </button>
+                            <button
+                              type="button"
+                              class:active={cbGraphMode === 'full'}
+                              aria-pressed={cbGraphMode === 'full'}
+                              onclick={() => cbGraphMode = 'full'}
+                            >
+                              Full
+                            </button>
+                          </div>
                         </div>
+                      </div>
+
+                      <div class="cb-filter-panel">
+                        <div class="cb-filter-group">
+                          <span class="eyebrow">Quadrants</span>
+                          <div class="cb-filter-chips">
+                            {#each allQuadrants as q}
+                              <button
+                                class:active={cbFilters.quadrants.includes(q)}
+                                onclick={() => {
+                                  if (cbFilters.quadrants.includes(q)) {
+                                    cbFilters.quadrants = cbFilters.quadrants.filter(v => v !== q);
+                                  } else {
+                                    cbFilters.quadrants = [...cbFilters.quadrants, q];
+                                  }
+                                }}
+                              >{quadrantMeta[q]?.label ?? q}</button>
+                            {/each}
+                          </div>
+                        </div>
+
+                        <div class="cb-filter-group">
+                          <span class="eyebrow">Ecosystems</span>
+                          <div class="cb-filter-chips">
+                            {#each uniqueEcosystems as e}
+                              <button
+                                class:active={cbFilters.ecosystems.includes(e)}
+                                onclick={() => {
+                                  if (cbFilters.ecosystems.includes(e)) {
+                                    cbFilters.ecosystems = cbFilters.ecosystems.filter(v => v !== e);
+                                  } else {
+                                    cbFilters.ecosystems = [...cbFilters.ecosystems, e];
+                                  }
+                                }}
+                              >{e}</button>
+                            {/each}
+                          </div>
+                        </div>
+
+                        <div class="cb-filter-group">
+                          <span class="eyebrow">Policy</span>
+                          <div class="cb-filter-chips">
+                            {#each ringOrder as r}
+                              <button
+                                class:active={cbFilters.rings.includes(r)}
+                                onclick={() => {
+                                  if (cbFilters.rings.includes(r)) {
+                                    cbFilters.rings = cbFilters.rings.filter(v => v !== r);
+                                  } else {
+                                    cbFilters.rings = [...cbFilters.rings, r];
+                                  }
+                                }}
+                              >{ringMeta[r]?.label ?? r}</button>
+                            {/each}
+                            <button
+                              class:active={cbFilters.rings.includes('uncharted')}
+                              onclick={() => {
+                                if (cbFilters.rings.includes('uncharted')) {
+                                  cbFilters.rings = cbFilters.rings.filter(v => v !== 'uncharted');
+                                } else {
+                                  cbFilters.rings = [...cbFilters.rings, 'uncharted'];
+                                }
+                              }}
+                            >Uncharted</button>
+                            <button
+                              class:active={cbFilters.trackedOnly}
+                              onclick={() => cbFilters.trackedOnly = !cbFilters.trackedOnly}
+                            >Tracked only</button>
+                          </div>
+                        </div>
+                        
+                        {#if cbFilters.quadrants.length > 0 || cbFilters.rings.length > 0 || cbFilters.ecosystems.length > 0 || cbFilters.trackedOnly}
+                          <button class="ghost-button subtle-button" onclick={() => {
+                            cbFilters = { quadrants: [], rings: [], ecosystems: [], trackedOnly: false };
+                          }}>Clear</button>
+                        {/if}
                       </div>
 
                       {#if codebaseData.patterns.length > 0}
@@ -1852,7 +1979,8 @@
                                 x2={tn.x} y2={tn.y}
                                 class="graph-edge"
                                 class:highlighted={graphHovered === edge.source || graphHovered === edge.target || graphSelected === edge.source || graphSelected === edge.target}
-                                style={`stroke-width:${Math.max(1, Math.min(4, edge.weight))};opacity:${(graphHovered === edge.source || graphHovered === edge.target) ? 0.7 : 0.15}`}
+                                class:project-highlighted={isEdgeHighlighted(edge.source, edge.target)}
+                                style={`stroke-width:${Math.max(1, Math.min(4, edge.weight))};opacity:${(graphHovered === edge.source || graphHovered === edge.target) ? 0.7 : isEdgeHighlighted(edge.source, edge.target) ? 0.25 : 0.05}`}
                               />
                             {/if}
                           {/each}
@@ -1862,6 +1990,7 @@
                               class="graph-node"
                               class:hovered={graphHovered === node.name}
                               class:selected={graphSelected === node.name}
+                              class:dimmed={!isNodeHighlighted(node.name)}
                               transform={`translate(${node.x},${node.y})`}
                               onmouseenter={() => graphHovered = node.name}
                               onmouseleave={() => graphHovered = null}
@@ -1877,7 +2006,7 @@
                               <circle
                                 r={node.radius}
                                 fill={nodeColor(node)}
-                                opacity={nodeOpacity(node)}
+                                opacity={isNodeHighlighted(node.name) ? nodeOpacity(node) : 0.15}
                                 stroke={node.is_tracked ? nodeColor(node) : '#94a3b8'}
                                 stroke-width={node.is_tracked ? 2 : 1}
                                 stroke-dasharray={node.is_tracked ? 'none' : '3,2'}
@@ -1887,7 +2016,7 @@
                                   y={-node.radius - 8}
                                   text-anchor="middle"
                                   class="graph-label"
-                                  style={`font-size:${node.usage >= 5 ? 11 : 9}px`}
+                                  style={`font-size:${node.usage >= 5 ? 11 : 9}px;opacity:${isNodeHighlighted(node.name) ? 1 : 0.3}`}
                                 >{node.name}</text>
                               {/if}
                             </g>
@@ -4035,10 +4164,101 @@
   .cb-graph-toolbar {
     display: flex;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 1.5rem;
     align-items: flex-start;
     flex-wrap: wrap;
   }
+  .cb-graph-controls {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .cb-control-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .cb-control-item span {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+  .cb-control-item select {
+    appearance: none;
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    padding: 0.6rem 2.2rem 0.6rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--ink);
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.8rem center;
+    background-size: 1rem;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+  .cb-control-item select:hover {
+    border-color: rgba(29, 78, 216, 0.22);
+  }
+  .cb-control-item select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.08);
+  }
+
+  .cb-filter-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    padding: 1rem;
+    background: var(--ink-faint, rgba(92, 71, 50, 0.03));
+    border-radius: 12px;
+    border: 1px solid var(--rule, rgba(92, 71, 50, 0.08));
+    align-items: flex-start;
+  }
+  .cb-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .cb-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .cb-filter-chips button {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 160ms ease;
+  }
+  .cb-filter-chips button:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+  }
+  .cb-filter-chips button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  
+  .graph-node.dimmed {
+    pointer-events: none;
+  }
+  .graph-edge.project-highlighted {
+    stroke-dasharray: none !important;
+  }
+
   .cb-graph-summary {
     display: grid;
     gap: 0.3rem;

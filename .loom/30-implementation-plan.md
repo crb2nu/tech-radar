@@ -2,132 +2,196 @@
 
 ## Scope
 
-Implement the next product slice as **Decision Workbench Foundations**:
+Implement the next product slice as **Project Pattern Intelligence Foundations**.
 
-- persist evidence and observations that are currently dropped
-- add project and technology drill-down data shapes
-- replace shallow recommendation rows with a more useful action queue
-- keep the existing radar/dashboard shell, but make it a launch point into real governance context
+The first delivery should make project-level architecture guidance real, not just implied:
+
+- enrich observations so the app can explain findings
+- extend pattern detection into a richer rule engine
+- add anti-pattern warnings and alternative suggestions
+- wire those findings into the existing codebase/projects experience
+
+## Delivery Strategy
+
+Ship this in layered slices so the existing app stays useful while the new guidance model comes online.
 
 ## Milestones
 
-1. Evidence persistence foundation
-2. Detail APIs and domain model enrichment
-3. UI drill-down transformation
-4. Action queue and overview refocus
-5. Validation, docs, and follow-on discovery hooks
+1. Observation model foundation
+2. Pattern and anti-pattern engine
+3. API and response-shape expansion
+4. UI integration for project intelligence
+5. Rule authoring, sample data, and docs
 
 ## Plan
 
-1. Evidence persistence foundation
-   - Extend DB persistence beyond `tech_name`, `version`, and `source`. `internal/db/db.go:192-201`, `infrastructure/radar/schema.sql:41-47`
-   - Decide whether to enrich `project_technologies` directly or add a new observation/evidence table.
-   - Preserve at least:
-     - evidence path
-     - evidence title
-     - evidence kind/source classification
-     - first/last seen timestamps if feasible
-   - Add DB tests that prove scanner-captured evidence survives ingestion. `pkg/types/types.go:115-123`, `internal/scanner/scanner.go:371-395`
+### 1. Observation model foundation
 
-2. Detail APIs and domain model enrichment
-   - Add detail-oriented API shapes for:
-     - a single radar entry dossier
-     - a single project drill-down
-   - Enrich the domain model so project views can return more than a score and top six names. `pkg/types/types.go:166-182`
-   - Keep existing list endpoints stable where practical, but introduce additive response shapes for richer drill-downs. `internal/api/api.go:161-215`
+- Fix the current one-row-per-tech limitation by introducing a richer observation structure.
+- Preferred direction:
+  - keep `project_technologies` for coarse summaries if needed
+  - add a new observation table for per-project evidence rows
+- Minimum observation payload:
+  - `project_id`
+  - `tech_name`
+  - `source`
+  - `evidence_path`
+  - `evidence_title`
+  - optional `observation_kind`
+  - optional `observed_at`
+- Primary files:
+  - `infrastructure/radar/schema.sql`
+  - `internal/db/db.go`
+  - `pkg/types/types.go`
 
-3. UI drill-down transformation
-   - Turn the selected-entry modal into a dossier view that includes:
-     - affected projects
-     - source/evidence list
-     - versions where known
-     - ring history and recommendation context
-   - Make project cards open a real project diagnostic panel/page instead of staying as summary tiles. `web/src/App.svelte:943-993`, `web/src/App.svelte:1335-1405`
-   - Preserve the existing radar canvas and command-deck framing; do not restart the UI from scratch. `web/src/App.svelte:771-939`
+Why first:
+- Pattern and anti-pattern guidance becomes much more trustworthy when we can point to more than one observation row. `infrastructure/radar/schema.sql:41-49`, `internal/db/db.go:184-225`
 
-4. Action queue and overview refocus
-   - Replace or augment the current ephemeral recommendations with a more durable action model.
-   - At minimum, actions should be structured objects with stable IDs, linked entry/project context, and a status.
-   - Refocus the overview from “how many things” toward:
-     - what changed
-     - what needs review now
-     - which projects got worse
-     - which technologies need evidence or decisions
-   - Reuse current recommendation heuristics as seed logic where helpful, but stop treating them as the final product. `web/src/lib/dashboard.ts:932-1049`
+### 2. Pattern and anti-pattern engine
 
-5. Validation, docs, and follow-on discovery hooks
-   - Update README and architecture notes to explain the richer workbench behavior.
-   - Add or refresh sample/demo data so the richer UI does not render as mostly empty states. `.tech-radar/radar.yaml:1-24`
-   - Keep AI/MCP discovery improvements as the next follow-on slice once the new dossier/action model is ready.
-   - Run:
-     - `go test ./...`
-     - `cd web && pnpm check`
-     - `cd web && pnpm build`
+- Replace the current `patternRule` shape with a richer rule model.
+- Add fields such as:
+  - `kind`
+  - `severity`
+  - `confidence`
+  - `why`
+  - `alternatives`
+  - `evidence selector`
+- Preserve existing positive patterns, then add a first negative rule set:
+  - active hold usage
+  - untracked concentration
+  - fragmented AI/MCP tooling
+  - excessive polyglot spread
+  - stack divergence between similar projects
+- Populate per-project pattern badges while fixing the current `ProjectStack.Patterns` gap.
+- Primary files:
+  - `internal/codebase/analyzer.go`
+  - `internal/codebase/analyzer_test.go`
+  - `pkg/types/codebase.go`
+
+### 3. API and response-shape expansion
+
+- Keep `/api/v1/codebase`, but expand it to return richer per-project findings.
+- Add dedicated detail endpoints if needed:
+  - `/api/v1/projects/:id/intelligence`
+  - `/api/v1/findings`
+- Carry evidence through response types instead of dropping it at the frontend boundary.
+- Primary files:
+  - `internal/api/api.go`
+  - `internal/db/db.go`
+  - `pkg/types/codebase.go`
+  - `pkg/types/types.go`
+
+### 4. UI integration for project intelligence
+
+- Add a project intelligence view or drawer that shows:
+  - design patterns
+  - anti-pattern warnings
+  - severity/confidence
+  - evidence list
+  - suggested alternatives
+- Upgrade the codebase tab pattern strip from passive badges to clickable diagnostics.
+- Fix the stack grid so project pattern badges actually render from populated data.
+- Extend `ProjectTechnology` on the frontend to include evidence fields.
+- Primary files:
+  - `web/src/App.svelte`
+  - `web/src/lib/dashboard.ts`
+  - `web/src/lib/codebase.ts`
+
+### 5. Rule authoring, sample data, and docs
+
+- Add a clear path for future configurable rules, likely via `.tech-radar/patterns.yaml`.
+- Expand seed/demo data so the feature does not look empty on a fresh repo.
+- Refresh README and product docs around “pattern intelligence” and “warnings with alternatives.”
+- Primary files:
+  - `README.md`
+  - `.tech-radar/config.yaml`
+  - `.tech-radar/radar.yaml`
+  - optional new `.tech-radar/patterns.yaml`
+
+## First Concrete Slice
+
+If we want the smallest high-value first implementation, do this first:
+
+1. Add an observation model that permits multiple rows per project/tech.
+2. Extend `internal/codebase/analyzer.go` to emit a richer per-project finding structure.
+3. Fix `ProjectStack.Patterns` population.
+4. Surface one project detail panel in the UI with:
+   - pattern badges
+   - one or two anti-pattern warnings
+   - evidence list
+   - one suggested alternative
+
+That gets us a visible usefulness jump without requiring the whole app to be rethought.
 
 ## Suggested Execution Order
 
-1. Schema + persistence
-2. Go types + DB reads
-3. New detail endpoints
-4. Svelte dossier/project drill-down UI
-5. Action queue refactor
-6. Sample data/docs polish
-
-This order keeps the foundational data changes ahead of the UX work so we do not build another shallow UI layer on top of incomplete persistence.
+1. Schema migration and Go types
+2. DB persistence and reads
+3. Analyzer refactor and tests
+4. API expansion
+5. Frontend models and project intelligence UI
+6. Docs and sample data
 
 ## Test Plan
 
-- Persistence tests
-  - Verify `EvidencePath` and `EvidenceTitle` survive scan ingestion and are returned through detail APIs.
+- DB tests
+  - prove multiple observations for the same tech/project can coexist
+  - prove evidence survives round-trip reads
+- Analyzer tests
+  - positive pattern coverage
+  - anti-pattern coverage
+  - severity/confidence consistency
+  - `ProjectStack.Patterns` population
 - API tests
-  - Add coverage for new project/entry detail routes or handlers.
+  - project intelligence response shape
+  - codebase analysis compatibility
 - UI validation
-  - Confirm a user can move from overview -> action -> dossier -> project drill-down without losing context.
-- Regression checks
-  - Re-run existing Go and Svelte validation after each milestone.
+  - project intelligence renders evidence and alternatives
+  - codebase pattern badges are actionable
+- Repo validation
+  - `go test ./...`
+  - `pnpm check`
+  - `pnpm build`
 
 ## Acceptance Criteria
 
-- Selecting a technology explains where it is observed, in which projects, with what evidence, and why it is currently in its ring.
-- Selecting a project explains which technologies are driving its risk/alignment and what action is needed next.
-- The action queue links to durable context objects rather than acting as a pure search/filter shortcut.
-- DB-backed mode preserves scanner evidence that is currently only available in YAML-first flows.
-- Local validation passes: `go test ./...`, `cd web && pnpm check`, `cd web && pnpm build`.
+- The backend can represent multiple observations per technology per project.
+- The analyzer emits both positive and negative findings with evidence and alternatives.
+- The frontend can show project-level findings instead of only summary scores.
+- The current pattern badge dead-end in the stack UI is fixed.
+- The repo remains green on Go and web validation.
 
 ## Rollout / Backout
 
 - Rollout
-  - Ship evidence persistence first, even if the UI lags behind.
-  - Ship detail APIs second so the frontend can build against stable data.
-  - Ship dossier/project/action UI third.
+  - ship schema and analyzer changes first
+  - ship project intelligence UI second
+  - then expand the rule catalog
 - Backout
-  - If the full workbench slice is too large, keep the evidence persistence and detail APIs; they are independently valuable and reduce future rework.
+  - if the full UX slice is too large, keep the richer observation model and analyzer output; both are independently valuable and reduce future rework
 
 ## Risks / Dependencies
 
-- Risk: schema work creates migration complexity.
-  - Mitigation: add additive tables/columns first and keep legacy list endpoints working.
-- Risk: persisted actions sprawl into project management.
-  - Mitigation: keep the first action model intentionally lightweight and governance-focused.
-- Risk: sparse sample data keeps the UX looking empty.
-  - Mitigation: update seed/demo data as part of the same slice.
-- Dependency: helper scripts in `$CODEX_HOME` remain broken, so planning docs should continue to be maintained manually for now.
+- Dependency: the current schema shape must evolve before findings become trustworthy. `infrastructure/radar/schema.sql:41-49`
+- Risk: heuristic rules become noisy.
+  - Mitigation: add confidence, severity, and tightly scoped first rules.
+- Risk: UI complexity rises too fast.
+  - Mitigation: start with ranked cards and one project detail surface, not a full new IA.
 
 ## Sources
 
-- [S1] `README.md:5-22`
-- [S2] `.tech-radar/radar.yaml:1-24`
-- [S3] `pkg/types/types.go:115-123`
-- [S4] `pkg/types/types.go:166-182`
-- [S5] `internal/scanner/scanner.go:371-395`
-- [S6] `internal/db/db.go:112-201`
-- [S7] `internal/api/api.go:161-215`
-- [S8] `infrastructure/radar/schema.sql:41-47`
-- [S9] `web/src/App.svelte:771-939`
-- [S10] `web/src/App.svelte:943-993`
-- [S11] `web/src/App.svelte:1335-1405`
-- [S12] `web/src/lib/dashboard.ts:932-1049`
-- [S13] `go test ./...`
-- [S14] `cd web && pnpm check`
-- [S15] `cd web && pnpm build`
-- [S16] `codebase_memory__codebase_stats(repo_id="tech-radar")`
+- [S1] `.tech-radar/config.yaml:1-69`
+- [S2] `internal/db/db.go:139-225`
+- [S3] `internal/api/api.go:226-299`
+- [S4] `internal/codebase/analyzer.go:21-179`
+- [S5] `internal/codebase/analyzer.go:241-355`
+- [S6] `internal/codebase/analyzer_test.go:90-135`
+- [S7] `internal/codebase/analyzer_test.go:232-254`
+- [S8] `pkg/types/codebase.go:33-49`
+- [S9] `pkg/types/types.go:115-123`
+- [S10] `infrastructure/radar/schema.sql:41-49`
+- [S11] `web/src/App.svelte:1717-1915`
+- [S12] `web/src/App.svelte:1955-2075`
+- [S13] `web/src/lib/dashboard.ts:31-44`
+- [S14] `web/src/lib/dashboard.ts:982-1099`

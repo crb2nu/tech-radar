@@ -16,6 +16,7 @@ export interface TechNode {
   ring: string;
   usage: number;
   is_tracked: boolean;
+  ecosystem: string;
 }
 
 export interface DependencyEdge {
@@ -196,7 +197,15 @@ export function tickSimulation(
       let dx = b.x - a.x;
       let dy = b.y - a.y;
       let dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const force = (-800 * alpha) / (dist * dist);
+      
+      let repulsion = -800 * alpha;
+      
+      // Ecosystem clustering: if same ecosystem, less repulsion
+      if (a.ecosystem === b.ecosystem && a.ecosystem !== 'Other') {
+        repulsion *= 0.5; // Half repulsion for same ecosystem
+      }
+
+      const force = repulsion / (dist * dist);
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
       a.vx -= fx;
@@ -270,15 +279,39 @@ export function getGraphView(
   nodes: GraphNode[],
   edges: DependencyEdge[],
   mode: GraphDensityMode,
-  focusedNames: string[] = []
+  focusedNames: string[] = [],
+  filters: { quadrants: string[]; rings: string[]; ecosystems: string[]; trackedOnly: boolean } = {
+    quadrants: [],
+    rings: [],
+    ecosystems: [],
+    trackedOnly: false
+  }
 ): { nodes: GraphNode[]; edges: DependencyEdge[] } {
+  // Apply hard filters first
+  let filteredNodes = nodes;
+  if (filters.quadrants.length > 0) {
+    filteredNodes = filteredNodes.filter(n => filters.quadrants.includes(n.quadrant));
+  }
+  if (filters.rings.length > 0) {
+    filteredNodes = filteredNodes.filter(n => filters.rings.includes(n.ring) || (!n.ring && filters.rings.includes('uncharted')));
+  }
+  if (filters.ecosystems.length > 0) {
+    filteredNodes = filteredNodes.filter(n => filters.ecosystems.includes(n.ecosystem));
+  }
+  if (filters.trackedOnly) {
+    filteredNodes = filteredNodes.filter(n => n.is_tracked);
+  }
+
+  const keepNames = new Set(filteredNodes.map(n => n.name));
+  const filteredEdges = edges.filter(e => keepNames.has(e.source) && keepNames.has(e.target));
+
   if (mode === 'full') {
-    return { nodes, edges };
+    return { nodes: filteredNodes, edges: filteredEdges };
   }
 
   const sticky = new Set(focusedNames.filter(Boolean));
-  const strength = edgeStrengthByNode(edges);
-  const scored = [...nodes]
+  const strength = edgeStrengthByNode(filteredEdges);
+  const scored = [...filteredNodes]
     .map((node) => ({
       node,
       score:
@@ -292,13 +325,13 @@ export function getGraphView(
   const keep = new Set(scored.slice(0, 42).map(({ node }) => node.name));
   for (const name of sticky) {
     keep.add(name);
-    for (const edge of edges) {
+    for (const edge of filteredEdges) {
       if (edge.source === name) keep.add(edge.target);
       if (edge.target === name) keep.add(edge.source);
     }
   }
 
-  const nextEdges = edges.filter((edge) => {
+  const nextEdges = filteredEdges.filter((edge) => {
     if (!keep.has(edge.source) || !keep.has(edge.target)) return false;
     return edge.weight >= 2 || sticky.has(edge.source) || sticky.has(edge.target);
   });
@@ -310,7 +343,7 @@ export function getGraphView(
   }
   for (const name of sticky) connected.add(name);
 
-  const nextNodes = nodes.filter((node) => connected.has(node.name));
+  const nextNodes = filteredNodes.filter((node) => connected.has(node.name));
   return { nodes: nextNodes, edges: nextEdges };
 }
 

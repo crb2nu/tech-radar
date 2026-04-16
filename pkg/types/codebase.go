@@ -21,6 +21,7 @@ type TechNode struct {
 	Ring      string `json:"ring"`
 	Usage     int    `json:"usage"`
 	IsTracked bool   `json:"is_tracked"`
+	Ecosystem string `json:"ecosystem"`
 }
 
 // DependencyEdge represents a co-usage relationship between two technologies.

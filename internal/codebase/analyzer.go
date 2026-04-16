@@ -256,6 +256,7 @@ func Analyze(radar *types.Radar, projects []types.Project) *types.CodebaseAnalys
 			Ring:      string(entry.Ring),
 			Usage:     usage,
 			IsTracked: tracked,
+			Ecosystem: guessEcosystem(techSources[techKey]),
 		}
 		if !tracked {
 			node.Quadrant = guessQuadrant(techKey, techSources[techKey])
@@ -542,6 +543,25 @@ func guessQuadrant(name string, sources []string) string {
 		}
 	}
 	return "tools"
+}
+
+// guessEcosystem identifies the runtime a technology belongs to based on the manifest file it was found in.
+func guessEcosystem(sources []string) string {
+	for _, s := range sources {
+		switch strings.ToLower(s) {
+		case "go.mod":
+			return "Go"
+		case "package.json", "pnpm-lock.yaml", "yarn.lock", "package-lock.json":
+			return "JavaScript/TypeScript"
+		case "pyproject.toml", "requirements.txt":
+			return "Python"
+		case "cargo.toml":
+			return "Rust"
+		case ".mcp.json", "mcp.json", "claude_desktop_config.json", "cline_mcp_settings.json":
+			return "AI/MCP"
+		}
+	}
+	return "Other"
 }
 
 func bestName(key string, entry types.Entry, tracked bool) string {
