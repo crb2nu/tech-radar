@@ -3,6 +3,10 @@ stages:
   - test
   - build
   - deploy
+  - scan
+
+include:
+  - local: '/ci/radar.yml'
 
 variables:
   GO_VERSION: "1.25.7"
@@ -107,3 +111,9 @@ build:container:
   only:
     - main
 
+radar-scan:
+  extends: .radar-scan
+  stage: scan
+  needs: ["build:container"]
+  variables:
+    RADAR_API_URL: "http://tech-radar.tech-radar.svc.cluster.local/api/v1/ingest"
