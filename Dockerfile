@@ -22,7 +22,7 @@ RUN go build -o bin/radar ./cmd/radar
 
 # Stage 3: Final image
 FROM alpine:latest
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates git
 WORKDIR /app
 COPY --from=backend-builder /app/bin/radar .
 # Create a default data directory

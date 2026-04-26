@@ -39,6 +39,7 @@ func main() {
 	rootCmd.AddCommand(initCmd())
 	rootCmd.AddCommand(addCmd())
 	rootCmd.AddCommand(scanCmd())
+	rootCmd.AddCommand(syncGitLabCmd())
 	rootCmd.AddCommand(renderCmd())
 	rootCmd.AddCommand(serveCmd())
 	rootCmd.AddCommand(listCmd())
@@ -276,25 +277,9 @@ func scanCmd() *cobra.Command {
 		Short: "Scan projects for technologies",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Load config if available
-			var config types.Config
-			// Default config
-			config.Scan.Files = []string{
-				"package.json",
-				"go.mod",
-				"requirements.txt",
-				"pyproject.toml",
-				"Cargo.toml",
-				".mcp.json",
-				"mcp.json",
-				"claude_desktop_config.json",
-				"cline_mcp_settings.json",
-			}
-
-			if data, err := os.ReadFile(".tech-radar/config.yaml"); err == nil {
-				if err := yaml.Unmarshal(data, &config); err != nil {
-					return fmt.Errorf("failed to parse .tech-radar/config.yaml: %w", err)
-				}
+			config, err := loadScanConfig()
+			if err != nil {
+				return err
 			}
 
 			s := scanner.New(config.Scan)
@@ -321,6 +306,8 @@ func scanCmd() *cobra.Command {
 						ProjectID:    project,
 						Path:         path,
 						Technologies: result.Technologies,
+						Observations: result.Observations,
+						Files:        result.Files,
 					}
 					if err := publishResult(apiURL, apiKey, scanResult); err != nil {
 						fmt.Printf("Error publishing results: %v\n", err)

@@ -1804,7 +1804,7 @@
                 </div>
 
                 {#if !codebaseData}
-                  <div class="empty-card">No codebase data available. Scan projects and publish results to populate this view.</div>
+                  <div class="empty-card">No codebase data yet. The in-cluster GitLab sync job will populate this view after it scans the projects your token can read.</div>
                 {:else}
                   <nav class="cb-sub-tabs">
                     <button class:active={cbSubTab === 'graph'} onclick={() => cbSubTab = 'graph'}>Dependency graph</button>

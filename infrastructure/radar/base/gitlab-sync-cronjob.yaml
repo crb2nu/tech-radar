@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tech-radar-gitlab-sync
+  namespace: tech-radar
+spec:
+  schedule: "17 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sync-gitlab
+              image: registry.harbor.lan/mcp/tech-radar:latest
+              imagePullPolicy: Always
+              args:
+                - sync-gitlab
+              env:
+                - name: GITLAB_URL
+                  value: "https://gitlab.flexinfer.ai"
+                - name: GITLAB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: tech-radar-gitlab-token
+                      key: token
+                - name: RADAR_API_URL
+                  value: "http://tech-radar.tech-radar.svc.cluster.local/api/v1/ingest"
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 2Gi

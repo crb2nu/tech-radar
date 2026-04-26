@@ -9,6 +9,7 @@ resources:
   - ingress.yaml
   - postgres.yaml
   - meilisearch.yaml
+  - gitlab-sync-cronjob.yaml
 
 secretGenerator:
   - name: tech-radar-db-urls

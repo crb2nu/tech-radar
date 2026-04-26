@@ -8,9 +8,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 
 	"gitlab.flexinfer.ai/services/tech-radar/internal/api"
+	"gitlab.flexinfer.ai/services/tech-radar/internal/codebase"
 	"gitlab.flexinfer.ai/services/tech-radar/internal/db"
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
 	"gopkg.in/yaml.v3"
@@ -54,6 +56,13 @@ func (s *Server) Start() error {
 		return err
 	}
 
+	mux := s.routes(distFS)
+
+	fmt.Printf("Starting radar server on http://0.0.0.0:%d\n", s.port)
+	return http.ListenAndServe(fmt.Sprintf(":%d", s.port), mux)
+}
+
+func (s *Server) routes(distFS fs.FS) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Serve static files with proper cache control
@@ -68,6 +77,12 @@ func (s *Server) Start() error {
 			// Asset files (which have cache-buster hashes) can be cached long term
 			w.Header().Set("Cache-Control", "public, max-age=31536000")
 		}
+
+		if r.Method == http.MethodGet && path.Ext(r.URL.Path) == "" {
+			serveIndex(w, r, distFS)
+			return
+		}
+
 		staticHandler.ServeHTTP(w, r)
 	})
 
@@ -75,33 +90,116 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/radar", s.handleRadarData)
 
 	// API v1 (Enterprise features)
-	mux.HandleFunc("/api/v1/radar", s.apiServer.GetRadar)
+	mux.HandleFunc("/api/v1/radar", s.handleV1Radar)
 	mux.HandleFunc("/api/v1/ingest", s.apiServer.IngestScan)
 	mux.HandleFunc("/api/v1/entry", s.apiServer.UpsertEntry)
 	mux.HandleFunc("/api/v1/search", s.apiServer.Search)
-	mux.HandleFunc("/api/v1/projects", s.apiServer.GetProjects)
-	mux.HandleFunc("/api/v1/insights", s.apiServer.GetInsights)
-	mux.HandleFunc("/api/v1/codebase", s.apiServer.GetCodebaseAnalysis)
+	mux.HandleFunc("/api/v1/projects", s.handleV1Projects)
+	mux.HandleFunc("/api/v1/insights", s.handleV1Insights)
+	mux.HandleFunc("/api/v1/codebase", s.handleV1Codebase)
 
-	fmt.Printf("Starting radar server on http://0.0.0.0:%d\n", s.port)
-	return http.ListenAndServe(fmt.Sprintf(":%d", s.port), mux)
+	return mux
 }
 
 func (s *Server) handleRadarData(w http.ResponseWriter, r *http.Request) {
+	radar, err := s.loadFileRadar()
+	if err != nil {
+		http.Error(w, err.Error(), statusForRadarLoad(err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, radar)
+}
+
+func (s *Server) handleV1Radar(w http.ResponseWriter, r *http.Request) {
+	if s.db != nil {
+		s.apiServer.GetRadar(w, r)
+		return
+	}
+
+	s.handleRadarData(w, r)
+}
+
+func (s *Server) handleV1Projects(w http.ResponseWriter, r *http.Request) {
+	if s.db != nil {
+		s.apiServer.GetProjects(w, r)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, []types.Project{})
+}
+
+func (s *Server) handleV1Insights(w http.ResponseWriter, r *http.Request) {
+	if s.db != nil {
+		s.apiServer.GetInsights(w, r)
+		return
+	}
+
+	radar, err := s.loadFileRadar()
+	if err != nil {
+		http.Error(w, err.Error(), statusForRadarLoad(err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, types.Insights{
+		TechCount: len(radar.Entries),
+	})
+}
+
+func (s *Server) handleV1Codebase(w http.ResponseWriter, r *http.Request) {
+	if s.db != nil {
+		s.apiServer.GetCodebaseAnalysis(w, r)
+		return
+	}
+
+	radar, err := s.loadFileRadar()
+	if err != nil {
+		http.Error(w, err.Error(), statusForRadarLoad(err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, codebase.Analyze(radar, nil))
+}
+
+func (s *Server) loadFileRadar() (*types.Radar, error) {
 	data, err := os.ReadFile(filepath.Join(s.dataDir, "radar.yaml"))
 	if err != nil {
-		http.Error(w, "Radar not initialized", http.StatusNotFound)
-		return
+		return nil, fmt.Errorf("radar not initialized")
 	}
 
 	var radar types.Radar
 	if err := yaml.Unmarshal(data, &radar); err != nil {
-		http.Error(w, "Error parsing radar data", http.StatusInternalServerError)
+		return nil, fmt.Errorf("error parsing radar data")
+	}
+
+	return &radar, nil
+}
+
+func statusForRadarLoad(err error) int {
+	if err.Error() == "radar not initialized" {
+		return http.StatusNotFound
+	}
+	return http.StatusInternalServerError
+}
+
+func serveIndex(w http.ResponseWriter, r *http.Request, distFS fs.FS) {
+	index, err := fs.ReadFile(distFS, "index.html")
+	if err != nil {
+		http.NotFound(w, r)
 		return
 	}
 
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+	_, _ = w.Write(index)
+}
+
+func writeJSON(w http.ResponseWriter, status int, value interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(radar); err != nil {
-		log.Printf("Error encoding radar response: %v", err)
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
 	}
 }

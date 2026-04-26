@@ -89,6 +89,18 @@ radar scan . --auto-add
 
 To publish scan results to a central radar server, use `--publish --api-url ... --api-key ...`. The CLI sends the API key as `Authorization: Bearer <token>` and also keeps `X-API-Key` for compatibility with older servers.
 
+### Sync GitLab From The Cluster
+
+For deployed radar instances, prefer the in-cluster GitLab sync instead of adding a scan job to every repository. The `sync-gitlab` command lists projects the token can read, shallow-clones each default branch, scans the repository, and publishes results to the radar service.
+
+```bash
+radar sync-gitlab \
+  --gitlab-url https://gitlab.flexinfer.ai \
+  --api-url http://tech-radar.tech-radar.svc.cluster.local/api/v1/ingest
+```
+
+The Kubernetes base includes a `tech-radar-gitlab-sync` CronJob that runs this every six hours. Provide a `tech-radar-gitlab-token` secret in the `tech-radar` namespace with a `token` key; the token needs GitLab `read_api` and `read_repository` access. Set `GITLAB_GROUPS` or `--gitlab-group` only when you want to restrict scanning to specific groups; otherwise it scans the token's project membership.
+
 ### Generate Visualization
 
 ```bash
