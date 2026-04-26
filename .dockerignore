@@ -1,0 +1,9 @@
+.git
+.worktrees
+.claude
+.cache
+.tech-radar
+bin
+web/node_modules
+web/.pnpm-store
+web/dist
