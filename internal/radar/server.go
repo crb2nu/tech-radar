@@ -1,6 +1,7 @@
 package radar
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"gitlab.flexinfer.ai/services/tech-radar/internal/api"
 	"gitlab.flexinfer.ai/services/tech-radar/internal/codebase"
@@ -86,6 +88,12 @@ func (s *Server) routes(distFS fs.FS) *http.ServeMux {
 		staticHandler.ServeHTTP(w, r)
 	})
 
+	// Health endpoints. /livez always returns 200 if the process is alive
+	// (kubelet won't restart-loop on transient DB outages). /healthz pings
+	// the DB and is the right signal for readiness/traffic gating.
+	mux.HandleFunc("/livez", s.handleLivez)
+	mux.HandleFunc("/healthz", s.handleHealthz)
+
 	// API for radar data (Legacy compatibility)
 	mux.HandleFunc("/api/radar", s.handleRadarData)
 
@@ -99,6 +107,31 @@ func (s *Server) routes(distFS fs.FS) *http.ServeMux {
 	mux.HandleFunc("/api/v1/codebase", s.handleV1Codebase)
 
 	return mux
+}
+
+func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "mode": "file"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := s.db.Ping(ctx); err != nil {
+		log.Printf("healthz: db ping failed: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"status": "unhealthy",
+			"reason": "database unreachable",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "mode": "db"})
 }
 
 func (s *Server) handleRadarData(w http.ResponseWriter, r *http.Request) {
