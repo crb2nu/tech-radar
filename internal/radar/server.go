@@ -13,9 +13,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gitlab.flexinfer.ai/services/tech-radar/internal/api"
 	"gitlab.flexinfer.ai/services/tech-radar/internal/codebase"
 	"gitlab.flexinfer.ai/services/tech-radar/internal/db"
+	"gitlab.flexinfer.ai/services/tech-radar/internal/metrics"
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
 	"gopkg.in/yaml.v3"
 )
@@ -94,12 +96,15 @@ func (s *Server) routes(distFS fs.FS) *http.ServeMux {
 	mux.HandleFunc("/livez", s.handleLivez)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 
+	// Prometheus scrape endpoint.
+	mux.Handle("/metrics", promhttp.Handler())
+
 	// API for radar data (Legacy compatibility)
 	mux.HandleFunc("/api/radar", s.handleRadarData)
 
 	// API v1 (Enterprise features)
 	mux.HandleFunc("/api/v1/radar", s.handleV1Radar)
-	mux.HandleFunc("/api/v1/ingest", s.apiServer.IngestScan)
+	mux.Handle("/api/v1/ingest", metrics.InstrumentIngest(http.HandlerFunc(s.apiServer.IngestScan)))
 	mux.HandleFunc("/api/v1/entry", s.apiServer.UpsertEntry)
 	mux.HandleFunc("/api/v1/search", s.apiServer.Search)
 	mux.HandleFunc("/api/v1/projects", s.handleV1Projects)
