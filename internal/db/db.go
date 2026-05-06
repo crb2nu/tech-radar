@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	_ "embed"
@@ -40,6 +41,11 @@ func New(dataSourceName string) (*DB, error) {
 	}
 
 	return &DB{pool: db}, nil
+}
+
+// Ping verifies the database connection is alive.
+func (d *DB) Ping(ctx context.Context) error {
+	return d.pool.PingContext(ctx)
 }
 
 // GetRadar fetches a radar by ID.

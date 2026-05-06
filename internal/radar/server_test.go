@@ -74,3 +74,27 @@ entries:
 		t.Fatal(err)
 	}
 }
+
+func TestHandleLivez(t *testing.T) {
+	s := &Server{}
+	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
+	w := httptest.NewRecorder()
+
+	s.handleLivez(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestHandleHealthzNoDB(t *testing.T) {
+	s := &Server{}
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+
+	s.handleHealthz(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 in file mode, got %d", w.Code)
+	}
+}
