@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/meilisearch/meilisearch-go"
 	"gitlab.flexinfer.ai/services/tech-radar/internal/codebase"
@@ -21,6 +22,8 @@ type Server struct {
 	meili          meilisearch.ServiceManager
 	hasAPIKeys     func() (bool, error)
 	validateAPIKey func(string) (bool, error)
+	driftWebhook   string
+	webhookClient  *http.Client
 }
 
 // NewServer creates a new API Server.
@@ -42,6 +45,8 @@ func NewServer(database *db.DB) *Server {
 		meili:          meiliClient,
 		hasAPIKeys:     hasAPIKeys,
 		validateAPIKey: validateAPIKey,
+		driftWebhook:   strings.TrimSpace(os.Getenv("DRIFT_WEBHOOK_URL")),
+		webhookClient:  &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -154,10 +159,60 @@ func (s *Server) detectDrift(result types.ScanResult) {
 
 	for _, tech := range result.Technologies {
 		if onHold[tech.Name] {
-			// Alert: Team using a technology on HOLD
 			log.Printf("DRIFT DETECTED: Project %s is using %s which is on HOLD", result.ProjectID, tech.Name)
-			// TODO: Send Slack/Webhook alert
+			s.sendDriftWebhook(result.ProjectID, tech.Name)
 		}
+	}
+}
+
+// driftEvent is the JSON payload posted to DRIFT_WEBHOOK_URL. The "text"
+// field is filled in for compatibility with Slack-style incoming webhooks;
+// other consumers can ignore it and read the structured fields.
+type driftEvent struct {
+	Type       string    `json:"type"`
+	Text       string    `json:"text"`
+	ProjectID  string    `json:"project_id"`
+	Technology string    `json:"technology"`
+	Ring       string    `json:"ring"`
+	DetectedAt time.Time `json:"detected_at"`
+}
+
+func (s *Server) sendDriftWebhook(projectID, tech string) {
+	if s.driftWebhook == "" {
+		return
+	}
+
+	event := driftEvent{
+		Type:       "drift",
+		Text:       fmt.Sprintf("DRIFT: project %s is using %s which is on HOLD", projectID, tech),
+		ProjectID:  projectID,
+		Technology: tech,
+		Ring:       string(types.RingHold),
+		DetectedAt: time.Now().UTC(),
+	}
+
+	body, err := json.Marshal(event)
+	if err != nil {
+		log.Printf("drift webhook: marshal failed: %v", err)
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, s.driftWebhook, strings.NewReader(string(body)))
+	if err != nil {
+		log.Printf("drift webhook: build request failed: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.webhookClient.Do(req)
+	if err != nil {
+		log.Printf("drift webhook: post failed: %v", err)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 300 {
+		log.Printf("drift webhook: %s returned status %s", s.driftWebhook, resp.Status)
 	}
 }
 
