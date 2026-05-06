@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -55,6 +56,7 @@ func (s *Server) IngestScan(w http.ResponseWriter, r *http.Request) {
 		status := http.StatusUnauthorized
 		if errors.Is(err, errAPIKeyValidationUnavailable) {
 			status = http.StatusInternalServerError
+			log.Printf("ingest: auth check failed (returning 500): %v", err)
 		}
 		http.Error(w, err.Error(), status)
 		return
@@ -62,6 +64,7 @@ func (s *Server) IngestScan(w http.ResponseWriter, r *http.Request) {
 
 	var result types.ScanResult
 	if err := json.NewDecoder(r.Body).Decode(&result); err != nil {
+		log.Printf("ingest: invalid payload from %s: %v", r.RemoteAddr, err)
 		http.Error(w, "Invalid payload", http.StatusBadRequest)
 		return
 	}
@@ -81,7 +84,7 @@ func (s *Server) authorizeIngestRequest(r *http.Request) error {
 
 	required, err := s.hasAPIKeys()
 	if err != nil {
-		return errAPIKeyValidationUnavailable
+		return fmt.Errorf("%w: hasAPIKeys: %v", errAPIKeyValidationUnavailable, err)
 	}
 	if !required {
 		return nil
@@ -97,7 +100,7 @@ func (s *Server) authorizeIngestRequest(r *http.Request) error {
 
 	valid, err := s.validateAPIKey(apiKey)
 	if err != nil {
-		return errAPIKeyValidationUnavailable
+		return fmt.Errorf("%w: validateAPIKey: %v", errAPIKeyValidationUnavailable, err)
 	}
 	if !valid {
 		return errors.New("invalid API key")

@@ -3,6 +3,7 @@ package db
 import (
 	"crypto/sha256"
 	"database/sql"
+	_ "embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -14,12 +15,16 @@ import (
 	"gitlab.flexinfer.ai/services/tech-radar/pkg/types"
 )
 
+//go:embed schema.sql
+var schemaSQL string
+
 // DB handles database operations.
 type DB struct {
 	pool *sql.DB
 }
 
-// New creates a new DB connection.
+// New creates a new DB connection and applies the schema. The schema is
+// idempotent (CREATE TABLE IF NOT EXISTS) so it is safe to run on every start.
 func New(dataSourceName string) (*DB, error) {
 	db, err := sql.Open("postgres", dataSourceName)
 	if err != nil {
@@ -28,6 +33,10 @@ func New(dataSourceName string) (*DB, error) {
 
 	if err := db.Ping(); err != nil {
 		return nil, err
+	}
+
+	if _, err := db.Exec(schemaSQL); err != nil {
+		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 
 	return &DB{pool: db}, nil
