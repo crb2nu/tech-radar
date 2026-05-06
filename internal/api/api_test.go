@@ -92,3 +92,39 @@ func TestIngestScanRequiresAPIKeyWhenConfigured(t *testing.T) {
 		}
 	})
 }
+
+func TestSendDriftWebhookNoOpWhenUnconfigured(t *testing.T) {
+	s := NewServer(nil)
+	s.driftWebhook = ""
+	// Should not panic or attempt any network call.
+	s.sendDriftWebhook("services/foo", "PHP")
+}
+
+func TestSendDriftWebhookPostsPayload(t *testing.T) {
+	var got driftEvent
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("expected application/json, got %q", ct)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	s := NewServer(nil)
+	s.driftWebhook = srv.URL
+
+	s.sendDriftWebhook("services/foo", "PHP")
+
+	if got.Type != "drift" {
+		t.Errorf("type=%q, want drift", got.Type)
+	}
+	if got.ProjectID != "services/foo" || got.Technology != "PHP" {
+		t.Errorf("got %+v", got)
+	}
+	if got.Text == "" {
+		t.Error("expected human-readable text field")
+	}
+}
