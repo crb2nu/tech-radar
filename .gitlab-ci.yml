@@ -57,7 +57,7 @@ test:
 
 build:frontend:
   stage: build
-  image: registry.harbor.lan/dockerhub-cache/library/node:20-alpine
+  image: docker.io/library/node:20-alpine
   script:
     - cd web
     - corepack enable
