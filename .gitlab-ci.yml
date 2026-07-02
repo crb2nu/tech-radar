@@ -1,3 +1,11 @@
+# Onboarded to platform/gitops shared CI templates (portfolio-refresh slice 5).
+# - lint / test / build:backend extend .go-lint / .go-test / .go-build from
+#   ci/templates/go.yml (which also pulls in security.yml: semgrep-sast +
+#   secret_detection in stage `test`, plus workflow auto-cancel).
+# - Custom jobs (build:frontend, build:container, radar-scan) and their stage
+#   names (deploy, scan) are preserved as-is; stage normalization is a later slice.
+# NOTE: ci/radar.yml is included by other repos — do not modify it here.
+
 stages:
   - lint
   - test
@@ -7,6 +15,8 @@ stages:
 
 include:
   - local: '/ci/radar.yml'
+  - project: 'platform/gitops'
+    file: '/ci/templates/go.yml'
 
 variables:
   GO_VERSION: "1.25.7"
@@ -17,16 +27,14 @@ variables:
 default:
   interruptible: true
 
-.go-env: &go-env
-  image: registry.harbor.lan/library/golang:${GO_VERSION}
-  before_script:
-    - mkdir -p .cache/gomod .cache/gobuild
-    - export GOMODCACHE="$CI_PROJECT_DIR/.cache/gomod"
-    - export GOCACHE="$CI_PROJECT_DIR/.cache/gobuild"
-    - mkdir -p web/dist
-    - test -f web/dist/index.html || printf '<!doctype html>\n' > web/dist/index.html
-    - go version
+# tech-radar embeds the built frontend (web/dist) into the Go binary; Go jobs
+# that compile without the real frontend artifact need a stub index.html.
+.radar-webdist-stub: &radar-webdist-stub
+  - mkdir -p web/dist
+  - test -f web/dist/index.html || printf '<!doctype html>\n' > web/dist/index.html
 
+# Global cache serves the remaining custom jobs (build:frontend pnpm store).
+# Template Go jobs define their own split gomod/gobuild caches.
 cache:
   key:
     files:
@@ -37,23 +45,24 @@ cache:
     - .cache/gobuild/
     - web/.pnpm-store/
 
-fmt:
-  stage: lint
-  <<: *go-env
-  script:
-    - test -z "$(gofmt -l $(git ls-files '*.go'))"
-
-vet:
-  stage: lint
-  <<: *go-env
-  script:
-    - go vet ./...
+lint:
+  extends: .go-lint
+  # Keep the repo's pinned local-registry Go image (template allows per-job override).
+  image: registry.harbor.lan/library/golang:${GO_VERSION}
+  before_script:
+    - !reference [.go-base, before_script]
+    - *radar-webdist-stub
 
 test:
-  stage: test
-  <<: *go-env
-  script:
-    - go test ./... -count=1
+  extends: .go-test
+  image: registry.harbor.lan/library/golang:${GO_VERSION}
+  variables:
+    # .go-base sets CGO_ENABLED=0, but the template test job uses -race, which
+    # requires cgo (matches Makefile `go test -race -cover`).
+    CGO_ENABLED: "1"
+  before_script:
+    - !reference [.go-base, before_script]
+    - *radar-webdist-stub
 
 build:frontend:
   stage: build
@@ -71,17 +80,19 @@ build:frontend:
     expire_in: 1 week
 
 build:backend:
-  stage: build
-  <<: *go-env
+  extends: .go-build
+  image: registry.harbor.lan/library/golang:${GO_VERSION}
   needs:
     - build:frontend
+  before_script:
+    - !reference [.go-base, before_script]
+    - *radar-webdist-stub
   script:
-    - mkdir -p bin
-    - go build -o bin/radar ./cmd/radar
+    - !reference [.go-build, script]
     - ./bin/radar --help >/dev/null
   artifacts:
     paths:
-      - bin/radar
+      - bin/
       - web/dist/
     expire_in: 1 week
 
